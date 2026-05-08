@@ -4,6 +4,10 @@
   "version": "0.1.4",
   "type": "module",
   "scripts": {
+    "setup": "bash scripts/install.sh",
+    "start": "bash scripts/start-web.sh",
+    "start:web": "bash scripts/start-web.sh",
+    "start:desktop": "bash scripts/start-desktop.sh",
     "dev": "vite",
     "dev:browser": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
