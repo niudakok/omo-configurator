@@ -31,7 +31,7 @@ import { BatchModelBar } from "@/components/agents/BatchModelBar";
 describe("BatchModelBar", () => {
   it("渲染批量替换界面", () => {
     render(<BatchModelBar />);
-    expect(screen.getByText("批量替换")).toBeInTheDocument();
-    expect(screen.getByText("应用")).toBeInTheDocument();
+    expect(screen.getByText("agents:batchReplace.title")).toBeInTheDocument();
+    expect(screen.getByText("agents:batchReplace.applyButton")).toBeInTheDocument();
   });
 });
