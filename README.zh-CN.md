@@ -1,8 +1,10 @@
 # OmO Configurator
 
-桌面 GUI 工具，用于可视化编辑 `opencode.json` 与 oh-my 的 agent 配置（`oh-my-openagent.json`，并兼容旧版 `oh-my-opencode.json`）。
+根目录中文首页已迁移到 [README.md](README.md)。
 
-**English:** [README.md](README.md)
+**English:** [README.en.md](README.en.md)
+
+下方保留与首页一致的中文说明，方便继续通过 `README.zh-CN.md` 访问。
 
 ## 创作动机
 
@@ -21,16 +23,33 @@ OpenCode 与 oh-my（agent 配置）往往是体积大、层级深的 JSON。纯
 
 - Node.js 20+
 - **npm**（安装依赖与运行脚本请使用 npm；本项目不使用 tnpm）
-- Rust 1.88+
-- macOS / Windows / Linux（需要系统 WebView 运行时）
+- Rust 1.88+（仅 Tauri 桌面模式需要）
+- macOS / Windows / Linux（Tauri 需要系统 WebView 运行时）
+
+### 安装依赖
+
+```bash
+bash scripts/install.sh
+```
+
+也可以通过 npm 入口执行：
+
+```bash
+npm run setup
+```
 
 ### 启动浏览器开发环境
 
 在 WSL/Linux 或只需要查看 React 前端时，可直接运行浏览器模式：
 
 ```bash
-npm install
-npm run dev:browser
+bash scripts/start-web.sh
+```
+
+也可以使用：
+
+```bash
+npm run start
 ```
 
 打开 Vite 输出的地址，通常是 `http://localhost:1420/`。浏览器模式会把可编辑的 `opencode.json`、oh-my 配置、快照和技能预览工作区保存在 `localStorage`。它不能直接读写 `~/.config/opencode`、`~/.local/share/opencode/auth.json` 或项目的 `.cursor/skills/`；需要编辑真实项目文件时请使用 Tauri 桌面模式。外部 provider 模型加载通过浏览器 `fetch` 完成，可能受 CORS 或网络策略限制。
@@ -38,8 +57,13 @@ npm run dev:browser
 ### 启动 Tauri 开发环境
 
 ```bash
-npm install
-npm run tauri dev
+bash scripts/start-desktop.sh
+```
+
+也可以使用：
+
+```bash
+npm run start:desktop
 ```
 
 ### 运行测试
