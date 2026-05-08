@@ -10,7 +10,9 @@
     "pluginVersionTitle": "npm package oh-my-openagent version",
     "connectedProviders": "Connected: {{names}}",
     "externalModelsLoading": "Loading external models...",
-    "externalModelsLoaded": "{{count}} external models"
+    "externalModelsLoaded": "{{count}} external models",
+    "browserMode": "Browser mode",
+    "browserModeTitle": "Running without Tauri. Config and snapshots are stored in localStorage."
   },
   "actions": {
     "save": "Save",
@@ -28,7 +30,8 @@
   "tabs": {
     "agents": "Agents & Categories",
     "mcp": "MCP Servers",
-    "providers": "Providers"
+    "providers": "Providers",
+    "skills": "Skills"
   },
   "table": {
     "name": "Name",

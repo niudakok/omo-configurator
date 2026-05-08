@@ -10,7 +10,9 @@
     "pluginVersionTitle": "npm 包 oh-my-openagent 的版本",
     "connectedProviders": "已连接: {{names}}",
     "externalModelsLoading": "加载外部模型...",
-    "externalModelsLoaded": "{{count}} 个外部模型"
+    "externalModelsLoaded": "{{count}} 个外部模型",
+    "browserMode": "浏览器模式",
+    "browserModeTitle": "未使用 Tauri。配置和快照保存在 localStorage。"
   },
   "actions": {
     "save": "保存",
@@ -28,7 +30,8 @@
   "tabs": {
     "agents": "Agents & Categories",
     "mcp": "MCP 服务器",
-    "providers": "Providers"
+    "providers": "Providers",
+    "skills": "技能"
   },
   "table": {
     "name": "名称",

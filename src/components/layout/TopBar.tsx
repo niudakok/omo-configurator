@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LanguageSwitcher } from "@/components/shared/LanguageSwitcher";
 import { useConfig } from "@/context/ConfigContext";
 import { getOhMyOpenCodeVersion } from "@/lib/config";
+import { describeBrowserLimitations, getAppVersion, getRuntimeMode } from "@/lib/runtime";
 
 export function TopBar() {
   const {
@@ -21,10 +21,12 @@ export function TopBar() {
   const [appVersion, setAppVersion] = useState<string | null>(null);
 
   useEffect(() => {
-    void getVersion()
+    void getAppVersion()
       .then(setAppVersion)
       .catch(() => setAppVersion(null));
   }, []);
+
+  const browserLimitation = authConfig ? describeBrowserLimitations(authConfig) : null;
 
   const currentVersion = openCodeConfig
     ? getOhMyOpenCodeVersion(openCodeConfig)
@@ -55,6 +57,11 @@ export function TopBar() {
         {appVersion && (
           <Badge variant="secondary" title={t("app.appVersionTitle")}>
             v{appVersion}
+          </Badge>
+        )}
+        {getRuntimeMode() === "browser" && (
+          <Badge variant="outline" title={browserLimitation ?? t("app.browserModeTitle")}>
+            {t("app.browserMode")}
           </Badge>
         )}
         {currentVersion && (
