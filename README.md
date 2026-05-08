@@ -1,101 +1,124 @@
 # OmO Configurator
 
-A desktop and browser GUI for visually editing `opencode.json` and the oh-my agent config (`oh-my-openagent.json`, with legacy support for `oh-my-opencode.json`).
+桌面与浏览器双模式 GUI，用于可视化编辑 `opencode.json` 与 oh-my 的 agent 配置（`oh-my-openagent.json`，并兼容旧版 `oh-my-opencode.json`）。
 
-**Other languages:** [简体中文](README.zh-CN.md)
+**English:** [README.en.md](README.en.md)
 
-## Motivation
+## 创作动机
 
-OpenCode and oh-my agent configs ship large, nested JSON configs. Hand-editing them in a text editor is easy to get wrong: a missing comma, a mistyped model id, or an inconsistent MCP block can break a workflow silently. This app exists to make that work safer and faster—structured forms instead of raw JSON, visibility into recommended models, bulk changes when you switch providers, and snapshots so you can roll back after experiments. It is a companion for people who live in these configs daily and want fewer surprises.
+OpenCode 与 oh-my（agent 配置）往往是体积大、层级深的 JSON。纯文本手改容易出错：漏逗号、模型 ID 写错、MCP 段落不一致，都可能让工作流在不知不觉中坏掉。本工具希望把这类日常维护变得更稳、更快：用结构化表单替代盲改 JSON，一眼看清与官方推荐是否一致，换厂商时能批量调整模型，再配合快照在试错后快速回滚。它面向需要长期维护这些配置、又希望少踩坑的使用者。
 
-## Stack
+## 技术栈
 
-- **Runtime**: Tauri v2 (Rust + WebView) or browser mode via Vite
+- **Runtime**: Tauri v2 (Rust + WebView)，也支持通过 Vite 运行浏览器模式
 - **Frontend**: React 19 + TypeScript + shadcn/ui + Tailwind CSS v4
-- **Build**: Vite
-- **Tests**: Vitest + Testing Library
+- **构建工具**: Vite
+- **测试**: Vitest + Testing Library
 
-## Development
+## 开发
 
-### Prerequisites
+### 前置条件
 
 - Node.js 20+
-- **npm** (use npm for install and scripts; this project does not use `tnpm`)
-- Rust 1.88+ for Tauri desktop builds
-- macOS / Windows / Linux (system WebView runtime required for Tauri)
+- **npm**（安装依赖与运行脚本请使用 npm；本项目不使用 tnpm）
+- Rust 1.88+（仅 Tauri 桌面模式需要）
+- macOS / Windows / Linux（Tauri 需要系统 WebView 运行时）
 
-### Run the browser dev app
-
-Use this workflow in WSL/Linux when you want the React app in a normal browser without starting Tauri:
+### 安装依赖
 
 ```bash
-npm install
-npm run dev:browser
+bash scripts/install.sh
 ```
 
-Open the printed Vite URL, usually `http://localhost:1420/`. Browser mode stores editable `opencode.json`, oh-my config, and snapshots in `localStorage`. It cannot read or write `~/.config/opencode` or `~/.local/share/opencode/auth.json` directly; export snapshots from the sidebar when you want a downloadable JSON copy. External provider model loading runs through browser `fetch`, so providers blocked by CORS or network policy may not load until you use the Tauri desktop app.
-
-### Run the Tauri dev app
+也可以通过 npm 入口执行：
 
 ```bash
-npm install
-npm run tauri dev
+npm run setup
 ```
 
-### Run tests
+### 启动浏览器模式
+
+在 WSL/Linux 或只需要查看 React 前端时，可直接运行浏览器模式：
+
+```bash
+bash scripts/start-web.sh
+```
+
+也可以使用：
+
+```bash
+npm run start
+```
+
+打开 Vite 输出的地址，通常是 `http://localhost:1420/`。浏览器模式会把可编辑的 `opencode.json`、oh-my 配置、快照和技能预览工作区保存在 `localStorage`。它不能直接读写 `~/.config/opencode`、`~/.local/share/opencode/auth.json` 或项目的 `.cursor/skills/`；需要编辑真实项目文件时请使用 Tauri 桌面模式。外部 provider 模型加载通过浏览器 `fetch` 完成，可能受 CORS 或网络策略限制。
+
+### 启动 Tauri 桌面模式
+
+```bash
+bash scripts/start-desktop.sh
+```
+
+也可以使用：
+
+```bash
+npm run start:desktop
+```
+
+### 运行测试
 
 ```bash
 npm run test
 ```
 
-### Production build
+### 构建生产包
 
 ```bash
 npm run tauri build
 ```
 
-## Features
+## 功能
 
-### Agents & Categories tab
+### Agents & Categories 标签页
+- 可视化编辑每个 agent/category 的模型和 variant
+- 推荐模型指示器：绿色 ✅ 表示与官方推荐一致，橙色 ⚠️ 表示不同（悬浮可查看推荐链）
+- 点击指示器一键应用官方推荐配置
 
-- Edit model and variant per agent/category in the UI
-- Recommended-model indicators: green ✅ when it matches the official recommendation, orange ⚠️ when it differs (hover for the recommendation chain)
-- Click an indicator to apply the official recommendation in one step
+### 批量替换
+- 一键将所有使用某模型的 agent/category 替换为另一个模型
+- 带确认对话框，防止误操作
 
-### Bulk replace
+### MCP 服务器管理
+- 卡片列表展示所有 MCP 服务器（远程/本地）
+- 点击展开内联编辑器：远程配置 URL + Headers，本地配置命令 + 环境变量
+- 支持新增、删除服务器
 
-- Replace every agent/category that uses one model with another, in one action
-- Confirmation dialog to reduce mistakes
+### Provider 管理
+- 左右分栏设计：左侧列表，右侧编辑表单
+- 支持配置 name、NPM 包、Base URL、API Key（默认遮罩显示）
+- 模型列表管理（添加/删除模型条目）
 
-### MCP servers
+### Skills 管理
+- 新增 Skills 标签页，面向 Cursor 项目级技能目录 `.cursor/skills/`
+- Tauri 桌面模式会列出每个技能子目录，展示可编辑的顶层文本文件，并支持创建技能目录与 `SKILL.md`
+- 为安全起见，编辑范围限制为技能目录顶层的 `.md`、`.txt`、`.json`、`.yaml`、`.yml` 和 `.toml` 文件
+- 浏览器模式无法访问本地文件系统，会明确提示限制，并把创建/编辑内容保存到 `localStorage` 作为预览工作区
 
-- Card list of all MCP servers (remote/local)
-- Inline editor on expand: remote URL + headers; local command + environment variables
-- Add and remove servers
+### 快照管理（侧边栏）
+- 保存当前配置为带时间戳的快照
+- 恢复快照（带确认对话框）
+- 导出快照为 JSON 文件
 
-### Providers
+### 版本检查
+- 顶栏显示当前 **oh-my-openagent** npm 插件版本（来自 `opencode.json` 的 `plugin` 字段）
+- 一键检查 npm 最新版本，有更新时可一键升级配置中的版本号
 
-- Split layout: list on the left, form on the right
-- Configure name, NPM package, base URL, API key (masked by default)
-- Manage model entries (add/remove)
+## 配置文件位置
 
-### Snapshots (sidebar)
-
-- Save the current configuration as a timestamped snapshot
-- Restore a snapshot (with confirmation)
-- Export a snapshot as a JSON file
-
-### Version check
-
-- Top bar shows the current **oh-my-openagent** npm plugin version (from `opencode.json` `plugin` entries)
-- One-click check for the latest npm version; when an update exists, bump the version in config in one step
-
-## Config file locations
-
-| File | Path |
+| 文件 | 路径 |
 |------|------|
 | opencode.json | `~/.config/opencode/opencode.json` |
-| oh-my agent config | `~/.config/opencode/oh-my-openagent.json` |
-| Snapshots | `~/.config/opencode/.snapshots/` |
+| oh-my agent 配置 | `~/.config/opencode/oh-my-openagent.json` |
+| 快照目录 | `~/.config/opencode/.snapshots/` |
+| 项目技能目录 | `<项目根目录>/.cursor/skills/` |
 
-**Oh-my config (agents / categories):** The app reads **`oh-my-openagent.json` first**, then falls back to **`oh-my-opencode.json`** in the same directory if the new file is missing. Saves always go to **`oh-my-openagent.json`**. Snapshots include both filenames when present, plus `opencode.json`.
+**Oh-my 配置（agents / categories）：** 应用**优先读取** `oh-my-openagent.json`，若不存在再读同目录下的 **`oh-my-opencode.json`**。保存时**始终写入** `oh-my-openagent.json`。快照在存在时会同时包含上述两个文件名及 `opencode.json`。
