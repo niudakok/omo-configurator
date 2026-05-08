@@ -1,6 +1,6 @@
 # OmO Configurator
 
-A desktop GUI for visually editing `opencode.json` and the oh-my agent config (`oh-my-openagent.json`, with legacy support for `oh-my-opencode.json`).
+A desktop and browser GUI for visually editing `opencode.json` and the oh-my agent config (`oh-my-openagent.json`, with legacy support for `oh-my-opencode.json`).
 
 **Other languages:** [简体中文](README.zh-CN.md)
 
@@ -10,7 +10,7 @@ OpenCode and oh-my agent configs ship large, nested JSON configs. Hand-editing t
 
 ## Stack
 
-- **Runtime**: Tauri v2 (Rust + WebView)
+- **Runtime**: Tauri v2 (Rust + WebView) or browser mode via Vite
 - **Frontend**: React 19 + TypeScript + shadcn/ui + Tailwind CSS v4
 - **Build**: Vite
 - **Tests**: Vitest + Testing Library
@@ -21,10 +21,21 @@ OpenCode and oh-my agent configs ship large, nested JSON configs. Hand-editing t
 
 - Node.js 20+
 - **npm** (use npm for install and scripts; this project does not use `tnpm`)
-- Rust 1.88+
-- macOS / Windows / Linux (system WebView runtime required)
+- Rust 1.88+ for Tauri desktop builds
+- macOS / Windows / Linux (system WebView runtime required for Tauri)
 
-### Run the dev app
+### Run the browser dev app
+
+Use this workflow in WSL/Linux when you want the React app in a normal browser without starting Tauri:
+
+```bash
+npm install
+npm run dev:browser
+```
+
+Open the printed Vite URL, usually `http://localhost:1420/`. Browser mode stores editable `opencode.json`, oh-my config, and snapshots in `localStorage`. It cannot read or write `~/.config/opencode` or `~/.local/share/opencode/auth.json` directly; export snapshots from the sidebar when you want a downloadable JSON copy. External provider model loading runs through browser `fetch`, so providers blocked by CORS or network policy may not load until you use the Tauri desktop app.
+
+### Run the Tauri dev app
 
 ```bash
 npm install

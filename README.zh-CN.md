@@ -10,7 +10,7 @@ OpenCode 与 oh-my（agent 配置）往往是体积大、层级深的 JSON。纯
 
 ## 技术栈
 
-- **Runtime**: Tauri v2 (Rust + WebView)
+- **Runtime**: Tauri v2 (Rust + WebView)，也支持通过 Vite 运行浏览器模式
 - **Frontend**: React 19 + TypeScript + shadcn/ui + Tailwind CSS v4
 - **构建工具**: Vite
 - **测试**: Vitest + Testing Library
@@ -24,7 +24,18 @@ OpenCode 与 oh-my（agent 配置）往往是体积大、层级深的 JSON。纯
 - Rust 1.88+
 - macOS / Windows / Linux（需要系统 WebView 运行时）
 
-### 启动开发环境
+### 启动浏览器开发环境
+
+在 WSL/Linux 或只需要查看 React 前端时，可直接运行浏览器模式：
+
+```bash
+npm install
+npm run dev:browser
+```
+
+打开 Vite 输出的地址，通常是 `http://localhost:1420/`。浏览器模式会把可编辑的 `opencode.json`、oh-my 配置、快照和技能预览工作区保存在 `localStorage`。它不能直接读写 `~/.config/opencode`、`~/.local/share/opencode/auth.json` 或项目的 `.cursor/skills/`；需要编辑真实项目文件时请使用 Tauri 桌面模式。外部 provider 模型加载通过浏览器 `fetch` 完成，可能受 CORS 或网络策略限制。
+
+### 启动 Tauri 开发环境
 
 ```bash
 npm install
@@ -64,6 +75,12 @@ npm run tauri build
 - 支持配置 name、NPM 包、Base URL、API Key（默认遮罩显示）
 - 模型列表管理（添加/删除模型条目）
 
+### Skills 管理
+- 新增 Skills 标签页，面向 Cursor 项目级技能目录 `.cursor/skills/`
+- Tauri 桌面模式会列出每个技能子目录，展示可编辑的顶层文本文件，并支持创建技能目录与 `SKILL.md`
+- 为安全起见，编辑范围限制为技能目录顶层的 `.md`、`.txt`、`.json`、`.yaml`、`.yml` 和 `.toml` 文件
+- 浏览器模式无法访问本地文件系统，会明确提示限制，并把创建/编辑内容保存到 `localStorage` 作为预览工作区
+
 ### 快照管理（侧边栏）
 - 保存当前配置为带时间戳的快照
 - 恢复快照（带确认对话框）
@@ -80,5 +97,6 @@ npm run tauri build
 | opencode.json | `~/.config/opencode/opencode.json` |
 | oh-my agent 配置 | `~/.config/opencode/oh-my-openagent.json` |
 | 快照目录 | `~/.config/opencode/.snapshots/` |
+| 项目技能目录 | `<项目根目录>/.cursor/skills/` |
 
 **Oh-my 配置（agents / categories）：** 应用**优先读取** `oh-my-openagent.json`，若不存在再读同目录下的 **`oh-my-opencode.json`**。保存时**始终写入** `oh-my-openagent.json`。快照在存在时会同时包含上述两个文件名及 `opencode.json`。
