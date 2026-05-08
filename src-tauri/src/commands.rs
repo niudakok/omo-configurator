@@ -25,6 +25,106 @@ fn auth_file() -> PathBuf {
         .join("auth.json")
 }
 
+#[derive(serde::Serialize)]
+pub struct SkillFileInfo {
+    path: String,
+    size: u64,
+}
+
+#[derive(serde::Serialize)]
+pub struct SkillSummary {
+    name: String,
+    updated_at: u64,
+    files: Vec<SkillFileInfo>,
+}
+
+#[derive(serde::Serialize)]
+pub struct SkillFileContent {
+    path: String,
+    content: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct SkillDetail {
+    name: String,
+    updated_at: u64,
+    files: Vec<SkillFileContent>,
+}
+
+fn skills_dir() -> Result<PathBuf, String> {
+    std::env::current_dir()
+        .map(|dir| dir.join(".cursor").join("skills"))
+        .map_err(|e| format!("获取项目目录失败: {}", e))
+}
+
+fn validate_skill_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("技能名称不能为空".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('\0') {
+        return Err("技能名称不能包含路径分隔符或非法字符".to_string());
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err("无效的技能名称".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn validate_skill_file_path(path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("技能文件路径不能为空".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('\0') {
+        return Err("技能文件必须位于技能目录顶层".to_string());
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err("无效的技能文件路径".to_string());
+    }
+    let allowed = [".md", ".txt", ".json", ".yaml", ".yml", ".toml"];
+    if !allowed.iter().any(|suffix| trimmed.ends_with(suffix)) {
+        return Err("仅支持编辑 Markdown、文本、JSON、YAML 或 TOML 文件".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn text_skill_files(skill_dir: &PathBuf) -> Result<Vec<SkillFileInfo>, String> {
+    let mut files = Vec::new();
+    if !skill_dir.exists() {
+        return Ok(files);
+    }
+    let entries = fs::read_dir(skill_dir).map_err(|e| format!("读取技能目录失败: {}", e))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|item| item.to_str()) else {
+            continue;
+        };
+        if validate_skill_file_path(name).is_err() {
+            continue;
+        }
+        let size = fs::metadata(&path).map(|metadata| metadata.len()).unwrap_or(0);
+        files.push(SkillFileInfo {
+            path: name.to_string(),
+            size,
+        });
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(files)
+}
+
+fn skill_updated_at(skill_dir: &PathBuf) -> u64 {
+    fs::metadata(skill_dir)
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
 #[tauri::command]
 pub fn read_auth() -> Result<String, String> {
     let path = auth_file();
@@ -79,6 +179,83 @@ pub fn config_file_exists(filename: &str) -> bool {
         return oh_my_openagent_path().exists() || oh_my_legacy_path().exists();
     }
     config_dir().join(filename).exists()
+}
+
+#[tauri::command]
+pub fn list_skills() -> Result<Vec<SkillSummary>, String> {
+    let dir = skills_dir()?;
+    if !dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut skills = Vec::new();
+    let entries = fs::read_dir(&dir).map_err(|e| format!("读取 .cursor/skills 失败: {}", e))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|item| item.to_str()) else {
+            continue;
+        };
+        if validate_skill_name(name).is_err() {
+            continue;
+        }
+        skills.push(SkillSummary {
+            name: name.to_string(),
+            updated_at: skill_updated_at(&path),
+            files: text_skill_files(&path)?,
+        });
+    }
+    skills.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(skills)
+}
+
+#[tauri::command]
+pub fn read_skill(name: &str) -> Result<SkillDetail, String> {
+    let skill_name = validate_skill_name(name)?;
+    let skill_dir = skills_dir()?.join(&skill_name);
+    if !skill_dir.exists() {
+        return Err(format!("技能 {} 不存在", skill_name));
+    }
+    let mut files = Vec::new();
+    for file in text_skill_files(&skill_dir)? {
+        let path = skill_dir.join(&file.path);
+        let content = fs::read_to_string(&path)
+            .map_err(|e| format!("读取技能文件 {} 失败: {}", file.path, e))?;
+        files.push(SkillFileContent {
+            path: file.path,
+            content,
+        });
+    }
+    Ok(SkillDetail {
+        name: skill_name,
+        updated_at: skill_updated_at(&skill_dir),
+        files,
+    })
+}
+
+#[tauri::command]
+pub fn create_skill(name: &str, content: &str) -> Result<(), String> {
+    let skill_name = validate_skill_name(name)?;
+    let skill_dir = skills_dir()?.join(&skill_name);
+    if skill_dir.exists() {
+        return Err(format!("技能 {} 已存在", skill_name));
+    }
+    fs::create_dir_all(&skill_dir).map_err(|e| format!("创建技能目录失败: {}", e))?;
+    fs::write(skill_dir.join("SKILL.md"), content)
+        .map_err(|e| format!("写入 SKILL.md 失败: {}", e))
+}
+
+#[tauri::command]
+pub fn write_skill_file(name: &str, path: &str, content: &str) -> Result<(), String> {
+    let skill_name = validate_skill_name(name)?;
+    let file_path = validate_skill_file_path(path)?;
+    let skill_dir = skills_dir()?.join(&skill_name);
+    if !skill_dir.exists() {
+        return Err(format!("技能 {} 不存在", skill_name));
+    }
+    fs::write(skill_dir.join(&file_path), content)
+        .map_err(|e| format!("写入技能文件 {} 失败: {}", file_path, e))
 }
 
 /// 从 opencode zen 的 /models 端点获取模型列表（Rust 侧发起，绕过 CORS）
