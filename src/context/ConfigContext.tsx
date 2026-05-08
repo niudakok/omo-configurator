@@ -22,7 +22,22 @@ import {
   serializeConfig,
 } from "@/lib/config";
 import { fetchExternalProviderModels } from "@/lib/providers";
-import { readAuth, readConfig, writeConfig, describeBrowserLimitations } from "@/lib/runtime";
+import {
+  createBrowserConfigSession,
+  describeBrowserLimitations,
+  exportBrowserConfigSession,
+  getBrowserConfigSessionInfo,
+  getRuntimeMode,
+  importBrowserConfigFromText,
+  initializeBrowserRuntime,
+  loadBrowserConfigDirectory,
+  loadBrowserConfigFiles,
+  readAuth,
+  readConfig,
+  saveBrowserConfigSession,
+  writeConfig,
+  type BrowserConfigSessionInfo,
+} from "@/lib/runtime";
 
 interface ConfigState {
   openCodeConfig: OpenCodeConfig | null;
@@ -31,6 +46,7 @@ interface ConfigState {
   /** 从 auth.json 连接的内置/外部 provider 拉取到的模型列表 */
   externalModels: string[];
   activeFile: ConfigFileType;
+  browserSession: BrowserConfigSessionInfo | null;
   loading: boolean;
   error: string | null;
 }
@@ -41,7 +57,9 @@ type ConfigAction =
   | { type: "SET_OPENCODE"; config: OpenCodeConfig }
   | { type: "SET_OH_MY"; config: OhMyOpenCodeConfig }
   | { type: "SET_ACTIVE_FILE"; file: ConfigFileType }
+  | { type: "SET_BROWSER_SESSION"; session: BrowserConfigSessionInfo }
   | { type: "SET_BOTH"; openCode: OpenCodeConfig; ohMy: OhMyOpenCodeConfig; auth: AuthConfig }
+  | { type: "CLEAR_CONFIG"; session: BrowserConfigSessionInfo | null }
   | { type: "SET_EXTERNAL_MODELS"; models: string[] };
 
 function configReducer(state: ConfigState, action: ConfigAction): ConfigState {
@@ -56,12 +74,26 @@ function configReducer(state: ConfigState, action: ConfigAction): ConfigState {
       return { ...state, ohMyOpenCodeConfig: action.config };
     case "SET_ACTIVE_FILE":
       return { ...state, activeFile: action.file };
+    case "SET_BROWSER_SESSION":
+      return { ...state, browserSession: action.session };
     case "SET_BOTH":
       return {
         ...state,
         openCodeConfig: action.openCode,
         ohMyOpenCodeConfig: action.ohMy,
         authConfig: action.auth,
+        browserSession: getRuntimeMode() === "browser" ? getBrowserConfigSessionInfo() : null,
+        loading: false,
+        error: null,
+      };
+    case "CLEAR_CONFIG":
+      return {
+        ...state,
+        openCodeConfig: null,
+        ohMyOpenCodeConfig: null,
+        authConfig: null,
+        externalModels: [],
+        browserSession: action.session,
         loading: false,
         error: null,
       };
@@ -89,12 +121,18 @@ interface ConfigContextValue extends ConfigState {
     toVariant?: string,
   ) => void;
   updatePluginVersion: (pluginName: string, newVersion: string) => void;
+  loadBrowserFiles: () => Promise<void>;
+  loadBrowserDirectory: () => Promise<void>;
+  importBrowserFile: (file: File) => Promise<void>;
+  createNewBrowserSession: () => Promise<void>;
+  saveBrowserSession: () => Promise<void>;
+  exportBrowserSession: () => Promise<void>;
 }
 
 const ConfigContext = createContext<ConfigContextValue | null>(null);
 
 async function persistOhMy(config: OhMyOpenCodeConfig) {
-  await writeConfig("oh-my-opencode.json", serializeConfig(config));
+  await writeConfig("oh-my-openagent.json", serializeConfig(config));
 }
 
 async function persistOpenCode(config: OpenCodeConfig) {
@@ -102,24 +140,32 @@ async function persistOpenCode(config: OpenCodeConfig) {
 }
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
+  if (getRuntimeMode() === "browser") {
+    initializeBrowserRuntime();
+  }
+
   const [state, dispatch] = useReducer(configReducer, {
     openCodeConfig: null,
     ohMyOpenCodeConfig: null,
     authConfig: null,
     externalModels: [],
     activeFile: "oh-my-opencode",
-    loading: true,
+    browserSession: getRuntimeMode() === "browser" ? getBrowserConfigSessionInfo() : null,
+    loading: getRuntimeMode() === "tauri",
     error: null,
   });
 
   const reload = useCallback(async () => {
+    const browserInfo = getRuntimeMode() === "browser" ? getBrowserConfigSessionInfo() : null;
+    if (browserInfo?.kind === "unloaded") {
+      dispatch({ type: "CLEAR_CONFIG", session: browserInfo });
+      return;
+    }
     dispatch({ type: "SET_LOADING", loading: true });
     try {
-      const [ocRaw, omRaw, authRaw] = await Promise.all([
-        readConfig("opencode.json"),
-        readConfig("oh-my-opencode.json"),
-        readAuth(),
-      ]);
+      const ocRaw = await readConfig("opencode.json");
+      const omRaw = await readConfig("oh-my-opencode.json");
+      const authRaw = await readAuth();
       const oc = parseOpenCodeConfig(ocRaw);
       const auth = JSON.parse(authRaw) as AuthConfig;
       dispatch({
@@ -132,7 +178,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       void fetchExternalProviderModels(auth, oc).then((models) => {
         dispatch({ type: "SET_EXTERNAL_MODELS", models });
       });
-      const limitation = describeBrowserLimitations(auth);
+      const limitation = describeBrowserLimitations(auth, getBrowserConfigSessionInfo());
       if (limitation) console.info(`[runtime] ${limitation}`);
     } catch (e) {
       dispatch({ type: "SET_ERROR", error: String(e) });
@@ -146,8 +192,56 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   }, [state.authConfig, state.openCodeConfig]);
 
   useEffect(() => {
-    void reload();
+    if (getRuntimeMode() === "tauri") void reload();
   }, [reload]);
+
+  const withBrowserSessionReload = useCallback(
+    async (loadSession: () => Promise<BrowserConfigSessionInfo> | BrowserConfigSessionInfo) => {
+      dispatch({ type: "SET_LOADING", loading: true });
+      try {
+        const session = await loadSession();
+        dispatch({ type: "SET_BROWSER_SESSION", session });
+        await reload();
+      } catch (caught) {
+        dispatch({
+          type: "SET_ERROR",
+          error: caught instanceof Error ? caught.message : String(caught),
+        });
+      }
+    },
+    [reload],
+  );
+
+  const loadBrowserFiles = useCallback(async () => {
+    await withBrowserSessionReload(loadBrowserConfigFiles);
+  }, [withBrowserSessionReload]);
+
+  const loadBrowserDirectory = useCallback(async () => {
+    await withBrowserSessionReload(loadBrowserConfigDirectory);
+  }, [withBrowserSessionReload]);
+
+  const importBrowserFile = useCallback(
+    async (file: File) => {
+      await withBrowserSessionReload(async () =>
+        importBrowserConfigFromText(file.name, await file.text()),
+      );
+    },
+    [withBrowserSessionReload],
+  );
+
+  const createNewBrowserSession = useCallback(async () => {
+    await withBrowserSessionReload(createBrowserConfigSession);
+  }, [withBrowserSessionReload]);
+
+  const saveBrowserSessionAction = useCallback(async () => {
+    const session = await saveBrowserConfigSession();
+    dispatch({ type: "SET_BROWSER_SESSION", session });
+  }, []);
+
+  const exportBrowserSessionAction = useCallback(async () => {
+    const session = exportBrowserConfigSession();
+    dispatch({ type: "SET_BROWSER_SESSION", session });
+  }, []);
 
   const setActiveFile = useCallback((file: ConfigFileType) => {
     dispatch({ type: "SET_ACTIVE_FILE", file });
@@ -162,6 +256,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "SET_OH_MY", config: updated });
       void persistOhMy(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.ohMyOpenCodeConfig],
   );
@@ -175,6 +272,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "SET_OH_MY", config: updated });
       void persistOhMy(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.ohMyOpenCodeConfig],
   );
@@ -188,6 +288,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
       void persistOpenCode(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.openCodeConfig],
   );
@@ -203,6 +306,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
       void persistOpenCode(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.openCodeConfig],
   );
@@ -216,6 +322,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
       void persistOpenCode(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.openCodeConfig],
   );
@@ -231,6 +340,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
       void persistOpenCode(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.openCodeConfig],
   );
@@ -262,6 +374,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       }
       dispatch({ type: "SET_OH_MY", config: updated });
       void persistOhMy(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.ohMyOpenCodeConfig],
   );
@@ -280,6 +395,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
       void persistOpenCode(updated);
+      if (getRuntimeMode() === "browser") {
+        dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
+      }
     },
     [state.openCodeConfig],
   );
@@ -299,6 +417,12 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         deleteProvider,
         batchReplaceModel,
         updatePluginVersion,
+        loadBrowserFiles,
+        loadBrowserDirectory,
+        importBrowserFile,
+        createNewBrowserSession,
+        saveBrowserSession: saveBrowserSessionAction,
+        exportBrowserSession: exportBrowserSessionAction,
       }}
     >
       {children}

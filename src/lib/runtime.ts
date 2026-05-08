@@ -37,12 +37,83 @@ interface BrowserSnapshot {
   files: Record<string, string>;
 }
 
+export type BrowserConfigSessionKind = "unloaded" | "imported" | "file-backed";
+
+export interface BrowserConfigSessionInfo {
+  kind: BrowserConfigSessionKind;
+  dirty: boolean;
+  canSaveToDisk: boolean;
+  sourceName: string | null;
+  loadedFiles: string[];
+  hasAuth: boolean;
+}
+
+type BrowserConfigFilename = "opencode.json" | "oh-my-openagent.json" | "oh-my-opencode.json";
+
+interface BrowserFileHandle {
+  name: string;
+  getFile(): Promise<File>;
+  createWritable(): Promise<BrowserWritableFileStream>;
+}
+
+interface BrowserWritableFileStream {
+  write(data: string): Promise<void>;
+  close(): Promise<void>;
+}
+
+interface BrowserDirectoryHandle {
+  name: string;
+  getFileHandle(name: string): Promise<BrowserFileHandle>;
+}
+
+interface BrowserOpenFilePickerOptions {
+  multiple?: boolean;
+  types?: Array<{
+    description?: string;
+    accept: Record<string, string[]>;
+  }>;
+}
+
+interface BrowserSaveFilePickerOptions {
+  suggestedName?: string;
+  types?: BrowserOpenFilePickerOptions["types"];
+}
+
+interface BrowserWindowWithFileSystemAccess extends Window {
+  showOpenFilePicker?: (options?: BrowserOpenFilePickerOptions) => Promise<BrowserFileHandle[]>;
+  showDirectoryPicker?: () => Promise<BrowserDirectoryHandle>;
+  showSaveFilePicker?: (options?: BrowserSaveFilePickerOptions) => Promise<BrowserFileHandle>;
+}
+
+interface BrowserConfigSession {
+  kind: BrowserConfigSessionKind;
+  dirty: boolean;
+  sourceName: string | null;
+  files: Partial<Record<BrowserConfigFilename, string>>;
+  auth: string;
+  fileHandles: Partial<Record<"opencode.json" | "oh-my-openagent.json", BrowserFileHandle>>;
+  loadedFiles: Set<string>;
+}
+
 const STORAGE_PREFIX = "omo-configurator";
 const OPENCODE_FILE = "opencode.json";
-const OH_MY_FILE = "oh-my-opencode.json";
+const OH_MY_LEGACY_FILE = "oh-my-opencode.json";
+const OH_MY_MODERN_FILE = "oh-my-openagent.json";
 const AUTH_FILE = "auth.json";
 const SNAPSHOTS_KEY = `${STORAGE_PREFIX}:snapshots`;
 const BROWSER_SKILLS_KEY = `${STORAGE_PREFIX}:skills`;
+const LEGACY_BROWSER_CONFIG_KEYS = [
+  `${STORAGE_PREFIX}:config:${OPENCODE_FILE}`,
+  `${STORAGE_PREFIX}:config:${OH_MY_LEGACY_FILE}`,
+  `${STORAGE_PREFIX}:config:${OH_MY_MODERN_FILE}`,
+  `${STORAGE_PREFIX}:config:${AUTH_FILE}`,
+];
+const CONFIG_JSON_TYPES = [
+  {
+    description: "OpenCode configuration JSON",
+    accept: { "application/json": [".json"] },
+  },
+];
 
 const browserInitialOpenCode = JSON.stringify(
   {
@@ -73,8 +144,18 @@ const browserInitialOhMy = JSON.stringify(
   2,
 );
 
+const browserSession: BrowserConfigSession = {
+  kind: "unloaded",
+  dirty: false,
+  sourceName: null,
+  files: {},
+  auth: "{}",
+  fileHandles: {},
+  loadedFiles: new Set(),
+};
+
 function isTauriRuntime(): boolean {
-  return "__TAURI_INTERNALS__" in window;
+  return Object.prototype.hasOwnProperty.call(window, "__TAURI_INTERNALS__");
 }
 
 async function loadTauriCore(): Promise<TauriCore> {
@@ -85,16 +166,113 @@ async function loadTauriApp(): Promise<TauriApp> {
   return import("@tauri-apps/api/app");
 }
 
-function storageKey(filename: string): string {
-  return `${STORAGE_PREFIX}:config:${filename}`;
+function browserWindow(): BrowserWindowWithFileSystemAccess {
+  return window as BrowserWindowWithFileSystemAccess;
+}
+
+function clearLegacyBrowserConfigKeys(): void {
+  if (isTauriRuntime()) return;
+  for (const key of LEGACY_BROWSER_CONFIG_KEYS) {
+    window.localStorage.removeItem(key);
+  }
+}
+
+function normalizeBrowserConfigFilename(filename: string): BrowserConfigFilename | null {
+  if (
+    filename === OPENCODE_FILE ||
+    filename === OH_MY_MODERN_FILE ||
+    filename === OH_MY_LEGACY_FILE
+  ) {
+    return filename;
+  }
+  return null;
 }
 
 function readBrowserConfig(filename: string): string {
-  const stored = window.localStorage.getItem(storageKey(filename));
-  if (stored !== null) return stored;
-  if (filename === OPENCODE_FILE) return browserInitialOpenCode;
-  if (filename === OH_MY_FILE) return browserInitialOhMy;
+  if (browserSession.kind === "unloaded") {
+    throw new Error("Browser configuration is not loaded. Import files or open a config folder first.");
+  }
+  if (filename === OPENCODE_FILE) {
+    return browserSession.files[OPENCODE_FILE] ?? "{}";
+  }
+  if (filename === OH_MY_LEGACY_FILE || filename === OH_MY_MODERN_FILE) {
+    return (
+      browserSession.files[OH_MY_MODERN_FILE] ??
+      browserSession.files[OH_MY_LEGACY_FILE] ??
+      "{}"
+    );
+  }
+  if (filename === AUTH_FILE) return browserSession.auth;
   return "{}";
+}
+
+function writeBrowserSessionFile(filename: string, content: string): void {
+  if (browserSession.kind === "unloaded") {
+    throw new Error("Browser configuration is not loaded. Import files or open a config folder first.");
+  }
+  if (filename === OPENCODE_FILE) {
+    browserSession.files[OPENCODE_FILE] = content;
+    browserSession.loadedFiles.add(OPENCODE_FILE);
+  } else if (filename === OH_MY_LEGACY_FILE || filename === OH_MY_MODERN_FILE) {
+    browserSession.files[OH_MY_MODERN_FILE] = content;
+    browserSession.loadedFiles.add(OH_MY_MODERN_FILE);
+  } else {
+    throw new Error(`Browser mode cannot write ${filename}`);
+  }
+  browserSession.dirty = true;
+}
+
+function resetBrowserSession(
+  kind: BrowserConfigSessionKind,
+  sourceName: string | null,
+  files: Partial<Record<BrowserConfigFilename, string>>,
+  auth: string,
+  fileHandles: BrowserConfigSession["fileHandles"] = {},
+): void {
+  browserSession.kind = kind;
+  browserSession.sourceName = sourceName;
+  browserSession.files = files;
+  browserSession.auth = auth;
+  browserSession.fileHandles = fileHandles;
+  browserSession.loadedFiles = new Set(Object.keys(files));
+  if (auth !== "{}") browserSession.loadedFiles.add(AUTH_FILE);
+  browserSession.dirty = false;
+}
+
+function browserSessionInfo(): BrowserConfigSessionInfo {
+  return {
+    kind: browserSession.kind,
+    dirty: browserSession.dirty,
+    canSaveToDisk:
+      browserSession.kind === "file-backed" &&
+      !!browserSession.fileHandles[OPENCODE_FILE] &&
+      !!browserSession.fileHandles[OH_MY_MODERN_FILE],
+    sourceName: browserSession.sourceName,
+    loadedFiles: Array.from(browserSession.loadedFiles).sort(),
+    hasAuth: browserSession.auth !== "{}",
+  };
+}
+
+async function readHandleIfExists(
+  directory: BrowserDirectoryHandle,
+  filename: BrowserConfigFilename | typeof AUTH_FILE,
+): Promise<{ handle: BrowserFileHandle; content: string } | null> {
+  try {
+    const handle = await directory.getFileHandle(filename);
+    return { handle, content: await (await handle.getFile()).text() };
+  } catch {
+    return null;
+  }
+}
+
+function downloadJson(filename: string, content: string): void {
+  const blob = new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function readBrowserSnapshots(): BrowserSnapshot[] {
@@ -178,6 +356,10 @@ export function getRuntimeMode(): "tauri" | "browser" {
   return isTauriRuntime() ? "tauri" : "browser";
 }
 
+export function initializeBrowserRuntime(): void {
+  clearLegacyBrowserConfigKeys();
+}
+
 export async function readConfig(filename: string): Promise<string> {
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
@@ -192,7 +374,7 @@ export async function writeConfig(filename: string, content: string): Promise<vo
     await invoke("write_config", { filename, content });
     return;
   }
-  window.localStorage.setItem(storageKey(filename), content);
+  writeBrowserSessionFile(filename, content);
 }
 
 export async function readAuth(): Promise<string> {
@@ -200,7 +382,166 @@ export async function readAuth(): Promise<string> {
     const { invoke } = await loadTauriCore();
     return invoke<string>("read_auth");
   }
-  return window.localStorage.getItem(storageKey(AUTH_FILE)) ?? "{}";
+  return browserSession.auth;
+}
+
+export function getBrowserConfigSessionInfo(): BrowserConfigSessionInfo {
+  if (isTauriRuntime()) {
+    return {
+      kind: "file-backed",
+      dirty: false,
+      canSaveToDisk: true,
+      sourceName: null,
+      loadedFiles: [],
+      hasAuth: false,
+    };
+  }
+  clearLegacyBrowserConfigKeys();
+  return browserSessionInfo();
+}
+
+export function hasBrowserFileSystemAccess(): boolean {
+  if (isTauriRuntime()) return false;
+  const fsWindow = browserWindow();
+  return !!fsWindow.showOpenFilePicker || !!fsWindow.showDirectoryPicker;
+}
+
+export async function loadBrowserConfigFiles(): Promise<BrowserConfigSessionInfo> {
+  if (isTauriRuntime()) return getBrowserConfigSessionInfo();
+  const picker = browserWindow().showOpenFilePicker;
+  if (!picker) {
+    throw new Error("This browser does not support file picking. Use Import JSON instead.");
+  }
+  const handles = await picker({ multiple: true, types: CONFIG_JSON_TYPES });
+  const files: Partial<Record<BrowserConfigFilename, string>> = {};
+  let auth = "{}";
+  for (const handle of handles) {
+    const content = await (await handle.getFile()).text();
+    const filename = normalizeBrowserConfigFilename(handle.name);
+    if (filename) files[filename] = content;
+    if (handle.name === AUTH_FILE) auth = content;
+  }
+  if (!files[OPENCODE_FILE] && !files[OH_MY_MODERN_FILE] && !files[OH_MY_LEGACY_FILE]) {
+    throw new Error("Select opencode.json and/or oh-my-openagent.json to start a browser session.");
+  }
+  resetBrowserSession(
+    "imported",
+    handles.map((handle) => handle.name).join(", "),
+    files,
+    auth,
+  );
+  return browserSessionInfo();
+}
+
+export async function loadBrowserConfigDirectory(): Promise<BrowserConfigSessionInfo> {
+  if (isTauriRuntime()) return getBrowserConfigSessionInfo();
+  const picker = browserWindow().showDirectoryPicker;
+  if (!picker) {
+    throw new Error("This browser does not support directory access. Use file import/export instead.");
+  }
+  const directory = await picker();
+  const opencode = await readHandleIfExists(directory, OPENCODE_FILE);
+  const modernOhMy = await readHandleIfExists(directory, OH_MY_MODERN_FILE);
+  const legacyOhMy = modernOhMy ? null : await readHandleIfExists(directory, OH_MY_LEGACY_FILE);
+  const auth = await readHandleIfExists(directory, AUTH_FILE);
+  if (!opencode && !modernOhMy && !legacyOhMy) {
+    throw new Error("The selected folder does not contain opencode.json or an oh-my config file.");
+  }
+  const files: Partial<Record<BrowserConfigFilename, string>> = {};
+  const fileHandles: BrowserConfigSession["fileHandles"] = {};
+  if (opencode) {
+    files[OPENCODE_FILE] = opencode.content;
+    fileHandles[OPENCODE_FILE] = opencode.handle;
+  }
+  if (modernOhMy) {
+    files[OH_MY_MODERN_FILE] = modernOhMy.content;
+    fileHandles[OH_MY_MODERN_FILE] = modernOhMy.handle;
+  } else if (legacyOhMy) {
+    files[OH_MY_LEGACY_FILE] = legacyOhMy.content;
+  }
+  resetBrowserSession(
+    "file-backed",
+    directory.name,
+    files,
+    auth?.content ?? "{}",
+    fileHandles,
+  );
+  return browserSessionInfo();
+}
+
+export function importBrowserConfigFromText(
+  filename: string,
+  content: string,
+): BrowserConfigSessionInfo {
+  if (isTauriRuntime()) return getBrowserConfigSessionInfo();
+  const normalized = normalizeBrowserConfigFilename(filename);
+  if (!normalized && filename !== AUTH_FILE) {
+    throw new Error(`Unsupported browser import filename: ${filename}`);
+  }
+  const files = { ...browserSession.files };
+  const auth = filename === AUTH_FILE ? content : browserSession.auth;
+  if (normalized) files[normalized] = content;
+  const sourceName = browserSession.sourceName
+    ? `${browserSession.sourceName}, ${filename}`
+    : filename;
+  resetBrowserSession("imported", sourceName, files, auth);
+  return browserSessionInfo();
+}
+
+export function createBrowserConfigSession(): BrowserConfigSessionInfo {
+  if (isTauriRuntime()) return getBrowserConfigSessionInfo();
+  resetBrowserSession(
+    "imported",
+    "New browser session",
+    {
+      [OPENCODE_FILE]: browserInitialOpenCode,
+      [OH_MY_MODERN_FILE]: browserInitialOhMy,
+    },
+    "{}",
+  );
+  browserSession.dirty = true;
+  return browserSessionInfo();
+}
+
+export async function saveBrowserConfigSession(): Promise<BrowserConfigSessionInfo> {
+  if (isTauriRuntime()) return getBrowserConfigSessionInfo();
+  if (browserSession.kind === "unloaded") {
+    throw new Error("Browser configuration is not loaded.");
+  }
+  if (!browserSession.fileHandles[OPENCODE_FILE]) {
+    throw new Error("This browser session is not backed by opencode.json. Export instead.");
+  }
+  let ohMyHandle = browserSession.fileHandles[OH_MY_MODERN_FILE];
+  if (!ohMyHandle) {
+    const picker = browserWindow().showSaveFilePicker;
+    if (!picker) throw new Error("Choose Export because this browser cannot save files directly.");
+    ohMyHandle = await picker({ suggestedName: OH_MY_MODERN_FILE, types: CONFIG_JSON_TYPES });
+    browserSession.fileHandles[OH_MY_MODERN_FILE] = ohMyHandle;
+  }
+  const writes: Array<[BrowserFileHandle, string]> = [
+    [browserSession.fileHandles[OPENCODE_FILE], readBrowserConfig(OPENCODE_FILE)],
+    [ohMyHandle, readBrowserConfig(OH_MY_MODERN_FILE)],
+  ];
+  for (const [handle, content] of writes) {
+    const writable = await handle.createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+  browserSession.loadedFiles.add(OPENCODE_FILE);
+  browserSession.loadedFiles.add(OH_MY_MODERN_FILE);
+  browserSession.dirty = false;
+  return browserSessionInfo();
+}
+
+export function exportBrowserConfigSession(): BrowserConfigSessionInfo {
+  if (isTauriRuntime()) return getBrowserConfigSessionInfo();
+  if (browserSession.kind === "unloaded") {
+    throw new Error("Browser configuration is not loaded.");
+  }
+  downloadJson(OPENCODE_FILE, readBrowserConfig(OPENCODE_FILE));
+  downloadJson(OH_MY_MODERN_FILE, readBrowserConfig(OH_MY_MODERN_FILE));
+  browserSession.dirty = false;
+  return browserSessionInfo();
 }
 
 export async function getAppVersion(): Promise<string> {
@@ -227,6 +568,9 @@ export async function saveSnapshot(name: string): Promise<void> {
     await invoke("save_snapshot", { name });
     return;
   }
+  if (browserSession.kind === "unloaded") {
+    throw new Error("Load or create a browser config session before saving snapshots.");
+  }
   const snapshotName = validateSnapshotName(name);
   const snapshots = readBrowserSnapshots().filter(
     (snapshot) => snapshot.name !== snapshotName,
@@ -236,7 +580,7 @@ export async function saveSnapshot(name: string): Promise<void> {
     timestamp: Math.floor(Date.now() / 1000),
     files: {
       [OPENCODE_FILE]: readBrowserConfig(OPENCODE_FILE),
-      "oh-my-openagent.json": readBrowserConfig(OH_MY_FILE),
+      [OH_MY_MODERN_FILE]: readBrowserConfig(OH_MY_MODERN_FILE),
     },
   });
   writeBrowserSnapshots(snapshots);
@@ -250,11 +594,12 @@ export async function restoreSnapshot(name: string): Promise<void> {
   }
   const snapshot = readBrowserSnapshots().find((item) => item.name === name);
   if (!snapshot) throw new Error(`Snapshot ${name} does not exist`);
-  if (snapshot.files[OPENCODE_FILE]) {
-    window.localStorage.setItem(storageKey(OPENCODE_FILE), snapshot.files[OPENCODE_FILE]);
-  }
-  const ohMyContent = snapshot.files["oh-my-openagent.json"] ?? snapshot.files[OH_MY_FILE];
-  if (ohMyContent) window.localStorage.setItem(storageKey(OH_MY_FILE), ohMyContent);
+  const files: Partial<Record<BrowserConfigFilename, string>> = {};
+  if (snapshot.files[OPENCODE_FILE]) files[OPENCODE_FILE] = snapshot.files[OPENCODE_FILE];
+  const ohMyContent = snapshot.files[OH_MY_MODERN_FILE] ?? snapshot.files[OH_MY_LEGACY_FILE];
+  if (ohMyContent) files[OH_MY_MODERN_FILE] = ohMyContent;
+  resetBrowserSession("imported", `Snapshot ${name}`, files, "{}");
+  browserSession.dirty = true;
 }
 
 export async function deleteSnapshot(name: string): Promise<void> {
@@ -409,10 +754,16 @@ export async function fetchModelsDevProviders(providerIds: string[]): Promise<st
   });
 }
 
-export function describeBrowserLimitations(auth: AuthConfig): string | null {
+export function describeBrowserLimitations(
+  auth: AuthConfig,
+  session: BrowserConfigSessionInfo = browserSessionInfo(),
+): string | null {
   if (isTauriRuntime()) return null;
+  if (session.kind === "unloaded") {
+    return "Browser mode starts unloaded. Import config files or open a config folder before editing.";
+  }
   if (Object.keys(auth).length === 0) {
-    return "Browser mode uses localStorage and cannot read ~/.local/share/opencode/auth.json. Connected provider models load after you add auth-backed providers in desktop mode or model entries in Providers.";
+    return "Browser mode did not load auth.json. It will not pretend to have desktop credentials; connected provider models require an explicit auth.json import or provider model entries.";
   }
   return "Browser mode fetches external provider models directly from the browser, so some providers may be limited by CORS or network policy.";
 }

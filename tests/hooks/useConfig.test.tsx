@@ -38,6 +38,11 @@ function wrapper({ children }: { children: ReactNode }) {
 describe("useConfig", () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
+    window.localStorage.clear();
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      value: {},
+      configurable: true,
+    });
   });
 
   it("初始化时加载两个配置文件", async () => {
@@ -59,16 +64,51 @@ describe("useConfig", () => {
     });
   });
 
+  it("browser mode starts unloaded until a session is explicitly created", async () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+
+    const { result } = renderHook(() => useConfig(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.browserSession?.kind).toBe("unloaded");
+    expect(result.current.openCodeConfig).toBeNull();
+    expect(result.current.ohMyOpenCodeConfig).toBeNull();
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("browser mode clears legacy localStorage config keys on startup", async () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    window.localStorage.setItem("omo-configurator:config:opencode.json", "stale-opencode");
+    window.localStorage.setItem("omo-configurator:config:oh-my-opencode.json", "stale-oh-my");
+    window.localStorage.setItem("omo-configurator:config:auth.json", "stale-auth");
+
+    const { result } = renderHook(() => useConfig(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(window.localStorage.getItem("omo-configurator:config:opencode.json")).toBeNull();
+    expect(window.localStorage.getItem("omo-configurator:config:oh-my-opencode.json")).toBeNull();
+    expect(window.localStorage.getItem("omo-configurator:config:auth.json")).toBeNull();
+  });
+
   it("updateAgent 更新 agent 模型并写入磁盘", async () => {
     mockedInvoke
       .mockResolvedValueOnce(MOCK_OPENCODE)
       .mockResolvedValueOnce(MOCK_OH_MY)
-      .mockResolvedValueOnce("{}") // read_auth
+      .mockResolvedValueOnce("{}")
       .mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useConfig(), { wrapper });
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.ohMyOpenCodeConfig).toBeDefined();
+    });
 
     await act(async () => {
       result.current.updateAgent("sisyphus", {
@@ -77,8 +117,14 @@ describe("useConfig", () => {
       });
     });
 
-    expect(result.current.ohMyOpenCodeConfig?.agents?.sisyphus.model).toBe(
-      "openai/gpt-5.4",
-    );
+    await waitFor(() => {
+      expect(result.current.ohMyOpenCodeConfig?.agents?.sisyphus.model).toBe(
+        "openai/gpt-5.4",
+      );
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("write_config", {
+      filename: "oh-my-openagent.json",
+      content: expect.any(String),
+    });
   });
 });
