@@ -8,6 +8,10 @@
     "delete": "Delete",
     "restore": "Restore"
   },
+  "browser": {
+    "sessionNote": "Browser snapshots are local workspace checkpoints; restore loads an imported dirty session, not disk files.",
+    "fileBackedNote": "Snapshot save captures the current browser session. Use Save to files for real disk writes."
+  },
   "dialogs": {
     "restore": {
       "title": "Restore Snapshot",

@@ -12,7 +12,27 @@
     "externalModelsLoading": "加载外部模型...",
     "externalModelsLoaded": "{{count}} 个外部模型",
     "browserMode": "浏览器模式",
-    "browserModeTitle": "未使用 Tauri。配置和快照保存在 localStorage。"
+    "browserModeTitle": "未使用 Tauri。来源：{{source}}。配置基于显式会话，只有手动保存或导出才会写出文件。"
+  },
+  "browserSession": {
+    "unloadedTitle": "加载配置后开始编辑",
+    "unloadedDescription": "浏览器模式不再从 localStorage 伪造 opencode.json 或 oh-my 配置。请打开配置目录、选择文件、导入 JSON，或显式创建新会话。",
+    "fallbackHint": "如果浏览器不支持目录/文件选择，请使用导入 JSON 和导出文件。",
+    "openFolder": "打开配置目录",
+    "openFiles": "选择配置文件",
+    "importFile": "导入 JSON 文件",
+    "newSession": "创建新会话",
+    "openFolderShort": "打开目录",
+    "openFilesShort": "选择文件",
+    "importShort": "导入",
+    "saveToFiles": "保存到文件",
+    "exportFiles": "导出文件",
+    "status": {
+      "unloaded": "浏览器：未加载",
+      "imported": "浏览器：导入会话",
+      "file-backed": "浏览器：文件会话",
+      "dirty": "有未保存修改"
+    }
   },
   "actions": {
     "save": "保存",

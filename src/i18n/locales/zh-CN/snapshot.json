@@ -8,6 +8,10 @@
     "delete": "删除",
     "restore": "恢复"
   },
+  "browser": {
+    "sessionNote": "浏览器快照只是本地工作区检查点；恢复会加载为有未保存修改的导入会话，不会写磁盘。",
+    "fileBackedNote": "快照保存捕获当前浏览器会话。需要真实写文件请使用“保存到文件”。"
+  },
   "dialogs": {
     "restore": {
       "title": "恢复快照",
