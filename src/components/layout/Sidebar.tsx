@@ -26,7 +26,7 @@ import {
 import { useConfig } from "@/context/ConfigContext";
 
 export function Sidebar() {
-  const { reload } = useConfig();
+  const { reload, browserSession } = useConfig();
   const { t } = useTranslation(["common", "snapshot"]);
   const [snapshots, setSnapshots] = useState<SnapshotInfo[]>([]);
   const [restoreTarget, setRestoreTarget] = useState<string | null>(null);
@@ -43,6 +43,7 @@ export function Sidebar() {
   }, []);
 
   const handleSave = async () => {
+    if (browserSession?.kind === "unloaded") return;
     const name = generateSnapshotName();
     await saveSnapshot(name);
     await refreshSnapshots();
@@ -151,9 +152,21 @@ export function Sidebar() {
       </ScrollArea>
       <Separator />
       <div className="p-2">
-        <Button className="w-full" size="sm" onClick={handleSave}>
+        <Button
+          className="w-full"
+          size="sm"
+          onClick={handleSave}
+          disabled={browserSession?.kind === "unloaded"}
+        >
           {t("snapshot:saveButton")}
         </Button>
+        {browserSession && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {browserSession.kind === "file-backed"
+              ? t("snapshot:browser.fileBackedNote")
+              : t("snapshot:browser.sessionNote")}
+          </p>
+        )}
       </div>
 
       <ConfirmDialog

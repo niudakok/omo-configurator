@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +14,19 @@ export function TopBar() {
     externalModels,
     authConfig,
     refreshExternalModels,
+    browserSession,
+    loadBrowserFiles,
+    loadBrowserDirectory,
+    importBrowserFile,
+    saveBrowserSession,
+    exportBrowserSession,
   } = useConfig();
   const { t } = useTranslation("common");
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void getAppVersion()
@@ -26,7 +34,22 @@ export function TopBar() {
       .catch(() => setAppVersion(null));
   }, []);
 
-  const browserLimitation = authConfig ? describeBrowserLimitations(authConfig) : null;
+  const browserLimitation = browserSession
+    ? describeBrowserLimitations(authConfig ?? {}, browserSession)
+    : null;
+  const browserStatus = browserSession
+    ? t(`browserSession.status.${browserSession.kind}`) +
+      (browserSession.dirty ? ` · ${t("browserSession.status.dirty")}` : "")
+    : null;
+
+  const runSessionAction = async (action: () => Promise<void>) => {
+    setSessionBusy(true);
+    try {
+      await action();
+    } finally {
+      setSessionBusy(false);
+    }
+  };
 
   const currentVersion = openCodeConfig
     ? getOhMyOpenCodeVersion(openCodeConfig)
@@ -60,8 +83,14 @@ export function TopBar() {
           </Badge>
         )}
         {getRuntimeMode() === "browser" && (
-          <Badge variant="outline" title={browserLimitation ?? t("app.browserModeTitle")}>
-            {t("app.browserMode")}
+          <Badge
+            variant="outline"
+            title={
+              browserLimitation ??
+              t("app.browserModeTitle", { source: browserSession?.sourceName ?? "" })
+            }
+          >
+            {browserStatus ?? t("app.browserMode")}
           </Badge>
         )}
         {currentVersion && (
@@ -82,6 +111,65 @@ export function TopBar() {
         )}
       </div>
       <div className="flex items-center gap-2">
+        {getRuntimeMode() === "browser" && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void runSessionAction(loadBrowserDirectory)}
+              disabled={sessionBusy}
+            >
+              {t("browserSession.openFolderShort")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void runSessionAction(loadBrowserFiles)}
+              disabled={sessionBusy}
+            >
+              {t("browserSession.openFilesShort")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => importInputRef.current?.click()}
+              disabled={sessionBusy}
+            >
+              {t("browserSession.importShort")}
+            </Button>
+            {browserSession?.canSaveToDisk && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => void runSessionAction(saveBrowserSession)}
+                disabled={sessionBusy || !browserSession.dirty}
+              >
+                {t("browserSession.saveToFiles")}
+              </Button>
+            )}
+            {browserSession?.kind !== "unloaded" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void runSessionAction(exportBrowserSession)}
+                disabled={sessionBusy}
+              >
+                {t("browserSession.exportFiles")}
+              </Button>
+            )}
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file) void runSessionAction(() => importBrowserFile(file));
+              }}
+            />
+          </>
+        )}
         {authConfig && Object.keys(authConfig).length > 0 && (
           <Badge
             variant="secondary"

@@ -12,7 +12,27 @@
     "externalModelsLoading": "Loading external models...",
     "externalModelsLoaded": "{{count}} external models",
     "browserMode": "Browser mode",
-    "browserModeTitle": "Running without Tauri. Config and snapshots are stored in localStorage."
+    "browserModeTitle": "Running without Tauri. Source: {{source}}. Config files are session-based until explicitly saved or exported."
+  },
+  "browserSession": {
+    "unloadedTitle": "Load configuration to start editing",
+    "unloadedDescription": "Browser mode no longer invents opencode.json or oh-my config from localStorage. Open a folder, pick files, import JSON, or create a new session explicitly.",
+    "fallbackHint": "If your browser does not support folder/file picking, use Import JSON and Export files.",
+    "openFolder": "Open config folder",
+    "openFiles": "Pick config files",
+    "importFile": "Import JSON file",
+    "newSession": "Create new session",
+    "openFolderShort": "Open folder",
+    "openFilesShort": "Pick files",
+    "importShort": "Import",
+    "saveToFiles": "Save to files",
+    "exportFiles": "Export files",
+    "status": {
+      "unloaded": "Browser: unloaded",
+      "imported": "Browser: imported session",
+      "file-backed": "Browser: file-backed session",
+      "dirty": "unsaved changes"
+    }
   },
   "actions": {
     "save": "Save",
