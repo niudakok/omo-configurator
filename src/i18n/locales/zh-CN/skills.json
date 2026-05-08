@@ -1,0 +1,30 @@
+{
+  "title": "项目技能",
+  "loading": "加载技能中...",
+  "empty": "还没有项目技能。",
+  "selectHint": "选择或创建一个技能来编辑项目本地文件。",
+  "mode": {
+    "tauri": "Tauri",
+    "browser": "浏览器"
+  },
+  "description": {
+    "tauri": "桌面模式会读取和写入项目本地的 .cursor/skills/。为安全起见，仅允许编辑技能目录顶层文本文件。",
+    "browser": "浏览器模式无法直接访问 .cursor/skills/，因此这里创建的技能会保存到 localStorage 作为预览工作区。请使用 Tauri 模式编辑项目文件。"
+  },
+  "list": {
+    "fileCount": "{{count}} 个文件"
+  },
+  "create": {
+    "title": "新建技能",
+    "placeholder": "skill-directory-name",
+    "button": "创建 SKILL.md"
+  },
+  "detail": {
+    "updated": "更新时间: {{date}}",
+    "safeFiles": "可编辑文件限制为技能目录顶层的 .md、.txt、.json、.yaml、.yml 和 .toml。"
+  },
+  "messages": {
+    "created": "已创建 {{name}} 和 SKILL.md。",
+    "saved": "已保存 {{path}}。"
+  }
+}

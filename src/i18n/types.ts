@@ -9,6 +9,7 @@ declare module "react-i18next" {
       mcp: typeof import("./locales/zh-CN/mcp.json");
       providers: typeof import("./locales/zh-CN/providers.json");
       snapshot: typeof import("./locales/zh-CN/snapshot.json");
+      skills: typeof import("./locales/zh-CN/skills.json");
     };
   }
 }

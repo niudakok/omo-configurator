@@ -1,0 +1,30 @@
+{
+  "title": "Project skills",
+  "loading": "Loading skills...",
+  "empty": "No project skills found yet.",
+  "selectHint": "Select or create a skill to edit its project-local files.",
+  "mode": {
+    "tauri": "Tauri",
+    "browser": "Browser"
+  },
+  "description": {
+    "tauri": "Desktop mode reads and writes project-local skills in .cursor/skills/. Only top-level text files are editable for safety.",
+    "browser": "Browser mode cannot access .cursor/skills/ directly, so skills created here are stored in localStorage as a preview workspace. Use Tauri mode to edit project files."
+  },
+  "list": {
+    "fileCount": "{{count}} file"
+  },
+  "create": {
+    "title": "New skill",
+    "placeholder": "skill-directory-name",
+    "button": "Create SKILL.md"
+  },
+  "detail": {
+    "updated": "Updated: {{date}}",
+    "safeFiles": "Editable files are limited to top-level .md, .txt, .json, .yaml, .yml, and .toml files."
+  },
+  "messages": {
+    "created": "Created {{name}} with SKILL.md.",
+    "saved": "Saved {{path}}."
+  }
+}
