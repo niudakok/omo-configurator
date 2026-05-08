@@ -8,6 +8,7 @@ import { CategoryTable } from "@/components/agents/CategoryTable";
 import { BatchModelBar } from "@/components/agents/BatchModelBar";
 import { McpList } from "@/components/mcp/McpList";
 import { ProviderList } from "@/components/provider/ProviderList";
+import { SkillsManager } from "@/components/skills/SkillsManager";
 import { useConfig } from "@/context/ConfigContext";
 
 export default function App() {
@@ -53,6 +54,7 @@ export default function App() {
             )}
             {tab === "mcp" && <McpList />}
             {tab === "providers" && <ProviderList />}
+            {tab === "skills" && <SkillsManager />}
           </div>
         </div>
       </div>
