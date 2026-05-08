@@ -9,7 +9,7 @@
   },
   "description": {
     "tauri": "桌面模式会读取和写入项目本地的 .cursor/skills/。为安全起见，仅允许编辑技能目录顶层文本文件。",
-    "browser": "浏览器模式无法直接访问 .cursor/skills/，因此这里创建的技能会保存到 localStorage 作为预览工作区。请使用 Tauri 模式编辑项目文件。"
+    "browser": "浏览器模式不会写入磁盘上的 .cursor/skills/。这里创建的技能仅保留在独立的 localStorage 预览工作区，不是配置来源。请使用 Tauri 模式编辑项目文件。"
   },
   "list": {
     "fileCount": "{{count}} 个文件"

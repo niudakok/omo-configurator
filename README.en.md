@@ -50,7 +50,7 @@ Or via npm:
 npm run start
 ```
 
-Open the printed Vite URL, usually `http://localhost:1420/`. Browser mode stores editable `opencode.json`, oh-my config, and snapshots in `localStorage`. It cannot read or write `~/.config/opencode` or `~/.local/share/opencode/auth.json` directly; export snapshots from the sidebar when you want a downloadable JSON copy. External provider model loading runs through browser `fetch`, so providers blocked by CORS or network policy may not load until you use the Tauri desktop app.
+Open the printed Vite URL, usually `http://localhost:1420/`. Browser mode starts unloaded: it does not invent `opencode.json`, oh-my config, or `auth.json` from `localStorage`. Use **Open config folder** or **Pick config files** when the File System Access API is available; otherwise use **Import JSON file** and **Export files**. Browser saves write `oh-my-openagent.json` for modern oh-my output, while reads still prefer `oh-my-openagent.json` and fall back to `oh-my-opencode.json`. Browser mode cannot automatically read `~/.config/opencode` or `~/.local/share/opencode/auth.json`; auth-backed model loading only happens after you explicitly import/select an `auth.json`, and browser network requests can still be limited by CORS or policy.
 
 ### Start Tauri desktop mode
 
@@ -105,13 +105,14 @@ npm run tauri build
 
 - Manage project-local Cursor skills under `.cursor/skills/`
 - Create skills and edit safe top-level text files in Tauri desktop mode
-- Use browser mode as a preview workspace backed by `localStorage`
+- Browser mode keeps skills in a separate `localStorage` preview workspace and does not write project `.cursor/skills/` on disk
 
 ### Snapshots (sidebar)
 
 - Save the current configuration as a timestamped snapshot
 - Restore a snapshot (with confirmation)
 - Export a snapshot as a JSON file
+- In browser mode, snapshots are local workspace checkpoints; restoring one loads an imported dirty session rather than claiming a disk write
 
 ### Version check
 

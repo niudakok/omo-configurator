@@ -50,7 +50,7 @@ bash scripts/start-web.sh
 npm run start
 ```
 
-打开 Vite 输出的地址，通常是 `http://localhost:1420/`。浏览器模式会把可编辑的 `opencode.json`、oh-my 配置、快照和技能预览工作区保存在 `localStorage`。它不能直接读写 `~/.config/opencode`、`~/.local/share/opencode/auth.json` 或项目的 `.cursor/skills/`；需要编辑真实项目文件时请使用 Tauri 桌面模式。外部 provider 模型加载通过浏览器 `fetch` 完成，可能受 CORS 或网络策略限制。
+打开 Vite 输出的地址，通常是 `http://localhost:1420/`。浏览器模式会以“未加载”状态启动：不会从 `localStorage` 伪造 `opencode.json`、oh-my 配置或 `auth.json`。支持 File System Access API 的浏览器可使用“打开配置目录”或“选择配置文件”；不支持时请使用“导入 JSON 文件”和“导出文件”。浏览器保存现代 oh-my 输出时写出 `oh-my-openagent.json`，读取时仍优先 `oh-my-openagent.json`，再回退到旧版 `oh-my-opencode.json`。浏览器模式不能自动读取 `~/.config/opencode`、`~/.local/share/opencode/auth.json` 或项目的 `.cursor/skills/`；只有显式导入/选择 `auth.json` 后才会尝试加载认证相关模型，且外部 provider 模型加载仍可能受 CORS 或网络策略限制。
 
 ### 启动 Tauri 桌面模式
 
@@ -101,12 +101,13 @@ npm run tauri build
 - 新增 Skills 标签页，面向 Cursor 项目级技能目录 `.cursor/skills/`
 - Tauri 桌面模式会列出每个技能子目录，展示可编辑的顶层文本文件，并支持创建技能目录与 `SKILL.md`
 - 为安全起见，编辑范围限制为技能目录顶层的 `.md`、`.txt`、`.json`、`.yaml`、`.yml` 和 `.toml` 文件
-- 浏览器模式无法访问本地文件系统，会明确提示限制，并把创建/编辑内容保存到 `localStorage` 作为预览工作区
+- 浏览器模式不会写入项目磁盘上的 `.cursor/skills/`，会明确提示限制，并把创建/编辑内容保存在独立的 `localStorage` 预览工作区
 
 ### 快照管理（侧边栏）
 - 保存当前配置为带时间戳的快照
 - 恢复快照（带确认对话框）
 - 导出快照为 JSON 文件
+- 浏览器模式中的快照是本地工作区检查点；恢复快照会加载为有未保存修改的导入会话，不会声称已写入磁盘
 
 ### 版本检查
 - 顶栏显示当前 **oh-my-openagent** npm 插件版本（来自 `opencode.json` 的 `plugin` 字段）
