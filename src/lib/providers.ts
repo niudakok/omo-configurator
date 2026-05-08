@@ -1,5 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { AuthConfig, OpenCodeConfig } from "@/types/config";
+import {
+  fetchModelsDevProviders as runtimeFetchModelsDevProviders,
+  fetchZenModels as runtimeFetchZenModels,
+} from "@/lib/runtime";
 
 /**
  * 从 opencode zen 的 /models 端点获取模型列表（通过 Rust 侧，绕过 CORS）
@@ -7,8 +10,7 @@ import type { AuthConfig, OpenCodeConfig } from "@/types/config";
  */
 async function fetchZenModels(apiKey: string): Promise<string[]> {
   try {
-    const json = await invoke<string>("fetch_zen_models", { apiKey });
-    return JSON.parse(json) as string[];
+    return await runtimeFetchZenModels(apiKey);
   } catch (e) {
     console.warn("[providers] fetchZenModels 失败:", e);
     return [];
@@ -22,8 +24,7 @@ async function fetchZenModels(apiKey: string): Promise<string[]> {
 async function fetchModelsDevProviders(providerIds: string[]): Promise<string[]> {
   if (providerIds.length === 0) return [];
   try {
-    const json = await invoke<string>("fetch_models_dev", { providerIds });
-    return JSON.parse(json) as string[];
+    return await runtimeFetchModelsDevProviders(providerIds);
   } catch (e) {
     console.warn("[providers] fetchModelsDevProviders 失败:", e);
     return [];

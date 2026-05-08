@@ -6,7 +6,6 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type {
   OpenCodeConfig,
   OhMyOpenCodeConfig,
@@ -23,6 +22,7 @@ import {
   serializeConfig,
 } from "@/lib/config";
 import { fetchExternalProviderModels } from "@/lib/providers";
+import { readAuth, readConfig, writeConfig, describeBrowserLimitations } from "@/lib/runtime";
 
 interface ConfigState {
   openCodeConfig: OpenCodeConfig | null;
@@ -94,17 +94,11 @@ interface ConfigContextValue extends ConfigState {
 const ConfigContext = createContext<ConfigContextValue | null>(null);
 
 async function persistOhMy(config: OhMyOpenCodeConfig) {
-  await invoke("write_config", {
-    filename: "oh-my-opencode.json",
-    content: serializeConfig(config),
-  });
+  await writeConfig("oh-my-opencode.json", serializeConfig(config));
 }
 
 async function persistOpenCode(config: OpenCodeConfig) {
-  await invoke("write_config", {
-    filename: "opencode.json",
-    content: serializeConfig(config),
-  });
+  await writeConfig("opencode.json", serializeConfig(config));
 }
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
@@ -122,9 +116,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_LOADING", loading: true });
     try {
       const [ocRaw, omRaw, authRaw] = await Promise.all([
-        invoke<string>("read_config", { filename: "opencode.json" }),
-        invoke<string>("read_config", { filename: "oh-my-opencode.json" }),
-        invoke<string>("read_auth"),
+        readConfig("opencode.json"),
+        readConfig("oh-my-opencode.json"),
+        readAuth(),
       ]);
       const oc = parseOpenCodeConfig(ocRaw);
       const auth = JSON.parse(authRaw) as AuthConfig;
@@ -138,6 +132,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       void fetchExternalProviderModels(auth, oc).then((models) => {
         dispatch({ type: "SET_EXTERNAL_MODELS", models });
       });
+      const limitation = describeBrowserLimitations(auth);
+      if (limitation) console.info(`[runtime] ${limitation}`);
     } catch (e) {
       dispatch({ type: "SET_ERROR", error: String(e) });
     }
