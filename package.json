@@ -8,6 +8,7 @@
     "start": "bash scripts/start-web.sh",
     "start:web": "bash scripts/start-web.sh",
     "start:desktop": "bash scripts/start-desktop.sh",
+    "dev:api": "node server/web-api.mjs",
     "dev": "vite",
     "dev:browser": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
