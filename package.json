@@ -7,6 +7,7 @@
     "setup": "bash scripts/install.sh",
     "start": "bash scripts/start-web.sh",
     "start:web": "bash scripts/start-web.sh",
+    "stop:web": "bash scripts/stop-web.sh",
     "start:desktop": "bash scripts/start-desktop.sh",
     "dev:api": "node server/web-api.mjs",
     "dev": "vite",
