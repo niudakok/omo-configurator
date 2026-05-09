@@ -48,12 +48,14 @@ interface ConfigState {
   externalModels: string[];
   activeFile: ConfigFileType;
   browserSession: BrowserConfigSessionInfo | null;
+  saveState: "idle" | "saving" | "saved" | "error";
   loading: boolean;
   error: string | null;
 }
 
 type ConfigAction =
   | { type: "SET_LOADING"; loading: boolean }
+  | { type: "SET_SAVE_STATE"; saveState: ConfigState["saveState"] }
   | { type: "SET_ERROR"; error: string }
   | { type: "SET_OPENCODE"; config: OpenCodeConfig }
   | { type: "SET_OH_MY"; config: OhMyOpenCodeConfig }
@@ -67,8 +69,10 @@ function configReducer(state: ConfigState, action: ConfigAction): ConfigState {
   switch (action.type) {
     case "SET_LOADING":
       return { ...state, loading: action.loading };
+    case "SET_SAVE_STATE":
+      return { ...state, saveState: action.saveState };
     case "SET_ERROR":
-      return { ...state, error: action.error, loading: false };
+      return { ...state, error: action.error, loading: false, saveState: "error" };
     case "SET_OPENCODE":
       return { ...state, openCodeConfig: action.config };
     case "SET_OH_MY":
@@ -84,6 +88,7 @@ function configReducer(state: ConfigState, action: ConfigAction): ConfigState {
         ohMyOpenCodeConfig: action.ohMy,
         authConfig: action.auth,
         browserSession: getRuntimeMode() === "browser" ? getBrowserConfigSessionInfo() : null,
+        saveState: "idle",
         loading: false,
         error: null,
       };
@@ -95,6 +100,7 @@ function configReducer(state: ConfigState, action: ConfigAction): ConfigState {
         authConfig: null,
         externalModels: [],
         browserSession: action.session,
+        saveState: "idle",
         loading: false,
         error: null,
       };
@@ -128,6 +134,7 @@ interface ConfigContextValue extends ConfigState {
   createNewBrowserSession: () => Promise<void>;
   saveBrowserSession: () => Promise<void>;
   exportBrowserSession: () => Promise<void>;
+  runWithSaveStatus: <T>(persist: () => Promise<T>) => Promise<T | undefined>;
 }
 
 const ConfigContext = createContext<ConfigContextValue | null>(null);
@@ -152,9 +159,34 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     externalModels: [],
     activeFile: "oh-my-opencode",
     browserSession: getRuntimeMode() === "browser" ? getBrowserConfigSessionInfo() : null,
+    saveState: "idle",
     loading: getRuntimeMode() === "tauri" || getRuntimeMode() === "browser",
     error: null,
   });
+
+  const markSavedSoon = useCallback(() => {
+    dispatch({ type: "SET_SAVE_STATE", saveState: "saved" });
+    window.setTimeout(() => {
+      dispatch({ type: "SET_SAVE_STATE", saveState: "idle" });
+    }, 1800);
+  }, []);
+
+  const persistWithStatus = useCallback(
+    async <T,>(persist: () => Promise<T>) => {
+      dispatch({ type: "SET_SAVE_STATE", saveState: "saving" });
+      try {
+        const result = await persist();
+        markSavedSoon();
+        return result;
+      } catch (caught) {
+        dispatch({
+          type: "SET_ERROR",
+          error: caught instanceof Error ? caught.message : String(caught),
+        });
+      }
+    },
+    [markSavedSoon],
+  );
 
   const reload = useCallback(async () => {
     const browserInfo = getRuntimeMode() === "browser" ? getBrowserConfigSessionInfo() : null;
@@ -273,7 +305,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         agents: { ...state.ohMyOpenCodeConfig.agents, [name]: config },
       };
       dispatch({ type: "SET_OH_MY", config: updated });
-      void persistOhMy(updated);
+      void persistWithStatus(() => persistOhMy(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -289,7 +321,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         categories: { ...state.ohMyOpenCodeConfig.categories, [name]: config },
       };
       dispatch({ type: "SET_OH_MY", config: updated });
-      void persistOhMy(updated);
+      void persistWithStatus(() => persistOhMy(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -305,7 +337,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         mcp: { ...state.openCodeConfig.mcp, [name]: server },
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
-      void persistOpenCode(updated);
+      void persistWithStatus(() => persistOpenCode(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -323,7 +355,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         mcp,
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
-      void persistOpenCode(updated);
+      void persistWithStatus(() => persistOpenCode(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -339,7 +371,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         provider: { ...state.openCodeConfig.provider, [name]: provider },
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
-      void persistOpenCode(updated);
+      void persistWithStatus(() => persistOpenCode(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -357,7 +389,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         provider,
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
-      void persistOpenCode(updated);
+      void persistWithStatus(() => persistOpenCode(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -391,7 +423,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         }
       }
       dispatch({ type: "SET_OH_MY", config: updated });
-      void persistOhMy(updated);
+      void persistWithStatus(() => persistOhMy(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -412,7 +444,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         }),
       };
       dispatch({ type: "SET_OPENCODE", config: updated });
-      void persistOpenCode(updated);
+      void persistWithStatus(() => persistOpenCode(updated));
       if (getRuntimeMode() === "browser") {
         dispatch({ type: "SET_BROWSER_SESSION", session: getBrowserConfigSessionInfo() });
       }
@@ -441,6 +473,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         createNewBrowserSession,
         saveBrowserSession: saveBrowserSessionAction,
         exportBrowserSession: exportBrowserSessionAction,
+        runWithSaveStatus: persistWithStatus,
       }}
     >
       {children}

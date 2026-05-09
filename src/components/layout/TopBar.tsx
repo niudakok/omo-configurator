@@ -20,6 +20,7 @@ export function TopBar() {
     importBrowserFile,
     saveBrowserSession,
     exportBrowserSession,
+    saveState,
   } = useConfig();
   const { t } = useTranslation("common");
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
@@ -97,6 +98,22 @@ export function TopBar() {
           <Badge variant="secondary" title={t("app.pluginVersionTitle")}>
             oh-my-openagent v{currentVersion}
           </Badge>
+        )}
+        {browserSession?.kind === "server-backed" && (
+          <>
+            <Badge variant="secondary" title={t("app.serverConnectedTitle")}>
+              {t("app.serverConnected")}
+            </Badge>
+            <Badge variant="secondary" title={t("app.autoSaveTitle")}>
+              {t("app.autoSave")}
+            </Badge>
+          </>
+        )}
+        {saveState === "saving" && (
+          <Badge variant="outline">{t("app.savingNow")}</Badge>
+        )}
+        {saveState === "saved" && (
+          <Badge variant="outline">{t("app.saved")}</Badge>
         )}
         {hasUpdate && (
           <Badge
