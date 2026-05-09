@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConfig } from "@/context/ConfigContext";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -30,6 +31,7 @@ function formatDate(timestamp: number): string {
 
 export function SkillsManager() {
   const { t } = useTranslation(["skills", "common"]);
+  const { runWithSaveStatus } = useConfig();
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<SkillDetail | null>(null);
@@ -38,7 +40,6 @@ export function SkillsManager() {
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const runtimeMode = getRuntimeMode();
@@ -103,15 +104,13 @@ export function SkillsManager() {
 
   const handleCreate = async () => {
     setSaving(true);
-    setMessage(null);
     setError(null);
     try {
       const name = newName.trim();
-      await createSkill(name, DEFAULT_SKILL_CONTENT);
+      await runWithSaveStatus(() => createSkill(name, DEFAULT_SKILL_CONTENT));
       setNewName("");
       setSelected(name);
       await refreshList();
-      setMessage(t("messages.created", { name }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -122,14 +121,12 @@ export function SkillsManager() {
   const handleSave = async () => {
     if (!selected) return;
     setSaving(true);
-    setMessage(null);
     setError(null);
     try {
-      await writeSkillFile(selected, selectedFile, draft);
+      await runWithSaveStatus(() => writeSkillFile(selected, selectedFile, draft));
       const nextDetail = await readSkill(selected);
       setDetail(nextDetail);
       await refreshList();
-      setMessage(t("messages.saved", { path: selectedFile }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -196,8 +193,6 @@ export function SkillsManager() {
                 : t("description.browser")}
         </div>
         {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
-        {message && <p className="mb-3 text-sm text-muted-foreground">{message}</p>}
-
         {detail ? (
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4">
