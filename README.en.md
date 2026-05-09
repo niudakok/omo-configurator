@@ -50,7 +50,7 @@ Or via npm:
 npm run start
 ```
 
-Open the printed Vite URL, usually `http://localhost:1420/`. Browser mode starts unloaded: it does not invent `opencode.json`, oh-my config, or `auth.json` from `localStorage`. Use **Open config folder** or **Pick config files** when the File System Access API is available; otherwise use **Import JSON file** and **Export files**. Browser saves write `oh-my-openagent.json` for modern oh-my output, while reads still prefer `oh-my-openagent.json` and fall back to `oh-my-opencode.json`. Browser mode cannot automatically read `~/.config/opencode` or `~/.local/share/opencode/auth.json`; auth-backed model loading only happens after you explicitly import/select an `auth.json`, and browser network requests can still be limited by CORS or policy.
+Open the printed Vite URL, usually `http://localhost:1420/`. Browser mode first probes the local config API: if available, it enters a **server-backed session** and reads/writes the real WSL/Linux config files; if unavailable, it clearly falls back to **fallback mode** and starts unloaded without inventing `opencode.json`, oh-my config, or `auth.json` from `localStorage`. In fallback mode, use **Open config folder** or **Pick config files** when the File System Access API is available; otherwise use **Import JSON file** and **Export files**. Browser saves write `oh-my-openagent.json` for modern oh-my output, while reads still prefer `oh-my-openagent.json` and fall back to `oh-my-opencode.json`. Fallback mode cannot automatically read `~/.config/opencode` or `~/.local/share/opencode/auth.json`; auth-backed model loading only happens after you explicitly import/select an `auth.json`, and browser network requests can still be limited by CORS or policy.
 
 ### Start Tauri desktop mode
 

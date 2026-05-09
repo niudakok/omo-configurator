@@ -50,7 +50,7 @@ bash scripts/start-web.sh
 npm run start
 ```
 
-打开 Vite 输出的地址，通常是 `http://localhost:1420/`。浏览器模式会以“未加载”状态启动：不会从 `localStorage` 伪造 `opencode.json`、oh-my 配置或 `auth.json`。支持 File System Access API 的浏览器可使用“打开配置目录”或“选择配置文件”；不支持时请使用“导入 JSON 文件”和“导出文件”。浏览器保存现代 oh-my 输出时写出 `oh-my-openagent.json`，读取时仍优先 `oh-my-openagent.json`，再回退到旧版 `oh-my-opencode.json`。浏览器模式不能自动读取 `~/.config/opencode`、`~/.local/share/opencode/auth.json` 或项目的 `.cursor/skills/`；只有显式导入/选择 `auth.json` 后才会尝试加载认证相关模型，且外部 provider 模型加载仍可能受 CORS 或网络策略限制。
+打开 Vite 输出的地址，通常是 `http://localhost:1420/`。浏览器模式会优先探测本地配置 API：如果检测到，就直接进入**服务器会话**并读写 WSL/Linux 上的真实配置文件；如果未检测到，则会明确进入**回退模式**，且以“未加载”状态启动，不会从 `localStorage` 伪造 `opencode.json`、oh-my 配置或 `auth.json`。支持 File System Access API 的浏览器可在回退模式下使用“打开配置目录”或“选择配置文件”；不支持时请使用“导入 JSON 文件”和“导出文件”。浏览器保存现代 oh-my 输出时写出 `oh-my-openagent.json`，读取时仍优先 `oh-my-openagent.json`，再回退到旧版 `oh-my-opencode.json`。回退模式不能自动读取 `~/.config/opencode`、`~/.local/share/opencode/auth.json` 或项目的 `.cursor/skills/`；只有显式导入/选择 `auth.json` 后才会尝试加载认证相关模型，且外部 provider 模型加载仍可能受 CORS 或网络策略限制。
 
 ### 启动 Tauri 桌面模式
 
