@@ -30,6 +30,7 @@ import {
   getRuntimeMode,
   importBrowserConfigFromText,
   initializeBrowserRuntime,
+  initializeBrowserRuntimeSession,
   loadBrowserConfigDirectory,
   loadBrowserConfigFiles,
   readAuth,
@@ -151,7 +152,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     externalModels: [],
     activeFile: "oh-my-opencode",
     browserSession: getRuntimeMode() === "browser" ? getBrowserConfigSessionInfo() : null,
-    loading: getRuntimeMode() === "tauri",
+    loading: getRuntimeMode() === "tauri" || getRuntimeMode() === "browser",
     error: null,
   });
 
@@ -192,7 +193,24 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   }, [state.authConfig, state.openCodeConfig]);
 
   useEffect(() => {
-    if (getRuntimeMode() === "tauri") void reload();
+    if (getRuntimeMode() === "tauri") {
+      void reload();
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const session = await initializeBrowserRuntimeSession();
+      if (!active) return;
+      dispatch({ type: "SET_BROWSER_SESSION", session });
+      if (session.kind === "unloaded") {
+        dispatch({ type: "CLEAR_CONFIG", session });
+        return;
+      }
+      await reload();
+    })();
+    return () => {
+      active = false;
+    };
   }, [reload]);
 
   const withBrowserSessionReload = useCallback(

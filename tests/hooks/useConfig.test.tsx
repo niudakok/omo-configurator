@@ -38,6 +38,7 @@ function wrapper({ children }: { children: ReactNode }) {
 describe("useConfig", () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
+    vi.restoreAllMocks();
     window.localStorage.clear();
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       value: {},
@@ -66,6 +67,7 @@ describe("useConfig", () => {
 
   it("browser mode starts unloaded until a session is explicitly created", async () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    vi.spyOn(window, "fetch").mockRejectedValue(new Error("offline"));
 
     const { result } = renderHook(() => useConfig(), { wrapper });
 
@@ -79,8 +81,59 @@ describe("useConfig", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
+  it("browser mode auto-loads server-backed config when local API is available", async () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "/api/runtime") {
+        return new Response(
+          JSON.stringify({
+            mode: "server-backed",
+            token: "token-123",
+            sourceName: "/home/test/.config/opencode",
+            loadedFiles: ["opencode.json", "oh-my-openagent.json"],
+            hasAuth: false,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/api/config/opencode") {
+        expect((init?.headers as Headers | undefined)?.get?.("Authorization") ?? (init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer token-123");
+        return new Response(JSON.stringify({ content: MOCK_OPENCODE }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url === "/api/config/oh-my") {
+        return new Response(JSON.stringify({ content: MOCK_OH_MY }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url === "/api/auth") {
+        return new Response(JSON.stringify({ content: "{}" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const { result } = renderHook(() => useConfig(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.browserSession?.kind).toBe("server-backed");
+    });
+
+    expect(result.current.openCodeConfig).toBeDefined();
+    expect(result.current.ohMyOpenCodeConfig).toBeDefined();
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
   it("browser mode clears legacy localStorage config keys on startup", async () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    vi.spyOn(window, "fetch").mockRejectedValue(new Error("offline"));
     window.localStorage.setItem("omo-configurator:config:opencode.json", "stale-opencode");
     window.localStorage.setItem("omo-configurator:config:oh-my-opencode.json", "stale-oh-my");
     window.localStorage.setItem("omo-configurator:config:auth.json", "stale-auth");

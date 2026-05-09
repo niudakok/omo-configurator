@@ -37,7 +37,7 @@ interface BrowserSnapshot {
   files: Record<string, string>;
 }
 
-export type BrowserConfigSessionKind = "unloaded" | "imported" | "file-backed";
+export type BrowserConfigSessionKind = "unloaded" | "imported" | "file-backed" | "server-backed";
 
 export interface BrowserConfigSessionInfo {
   kind: BrowserConfigSessionKind;
@@ -93,6 +93,13 @@ interface BrowserConfigSession {
   auth: string;
   fileHandles: Partial<Record<"opencode.json" | "oh-my-openagent.json", BrowserFileHandle>>;
   loadedFiles: Set<string>;
+}
+
+interface BrowserServerRuntime {
+  token: string;
+  sourceName: string;
+  loadedFiles: string[];
+  hasAuth: boolean;
 }
 
 const STORAGE_PREFIX = "omo-configurator";
@@ -154,6 +161,8 @@ const browserSession: BrowserConfigSession = {
   loadedFiles: new Set(),
 };
 
+let browserServerRuntime: BrowserServerRuntime | null = null;
+
 function isTauriRuntime(): boolean {
   return Object.prototype.hasOwnProperty.call(window, "__TAURI_INTERNALS__");
 }
@@ -175,6 +184,34 @@ function clearLegacyBrowserConfigKeys(): void {
   for (const key of LEGACY_BROWSER_CONFIG_KEYS) {
     window.localStorage.removeItem(key);
   }
+}
+
+async function apiFetch(pathname: string, init: RequestInit = {}): Promise<Response> {
+  if (!browserServerRuntime) {
+    throw new Error("Server-backed browser runtime is not available.");
+  }
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${browserServerRuntime.token}`);
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const response = await fetch(pathname, { ...init, headers });
+  if (!response.ok) {
+    let message = `${init.method ?? "GET"} ${pathname} failed with HTTP ${response.status}`;
+    try {
+      const data = (await response.json()) as { error?: string };
+      if (data.error) message = data.error;
+    } catch {
+      // ignore malformed error payload
+    }
+    throw new Error(message);
+  }
+  return response;
+}
+
+async function apiJson<T>(pathname: string, init?: RequestInit): Promise<T> {
+  const response = await apiFetch(pathname, init);
+  return (await response.json()) as T;
 }
 
 function normalizeBrowserConfigFilename(filename: string): BrowserConfigFilename | null {
@@ -244,12 +281,19 @@ function browserSessionInfo(): BrowserConfigSessionInfo {
     kind: browserSession.kind,
     dirty: browserSession.dirty,
     canSaveToDisk:
-      browserSession.kind === "file-backed" &&
-      !!browserSession.fileHandles[OPENCODE_FILE] &&
-      !!browserSession.fileHandles[OH_MY_MODERN_FILE],
+      (browserSession.kind === "file-backed" &&
+        !!browserSession.fileHandles[OPENCODE_FILE] &&
+        !!browserSession.fileHandles[OH_MY_MODERN_FILE]) ||
+      browserSession.kind === "server-backed",
     sourceName: browserSession.sourceName,
-    loadedFiles: Array.from(browserSession.loadedFiles).sort(),
-    hasAuth: browserSession.auth !== "{}",
+    loadedFiles:
+      browserSession.kind === "server-backed" && browserServerRuntime
+        ? [...browserServerRuntime.loadedFiles].sort()
+        : Array.from(browserSession.loadedFiles).sort(),
+    hasAuth:
+      browserSession.kind === "server-backed" && browserServerRuntime
+        ? browserServerRuntime.hasAuth
+        : browserSession.auth !== "{}",
   };
 }
 
@@ -360,10 +404,58 @@ export function initializeBrowserRuntime(): void {
   clearLegacyBrowserConfigKeys();
 }
 
+export async function initializeBrowserRuntimeSession(): Promise<BrowserConfigSessionInfo> {
+  initializeBrowserRuntime();
+  if (isTauriRuntime()) return getBrowserConfigSessionInfo();
+  try {
+    const runtime = await fetch("/api/runtime").then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Runtime probe failed with HTTP ${response.status}`);
+      }
+      return (await response.json()) as {
+        mode: string;
+        token: string;
+        sourceName: string;
+        loadedFiles: string[];
+        hasAuth: boolean;
+      };
+    });
+
+    if (runtime.mode !== "server-backed" || !runtime.token) {
+      throw new Error("Server-backed runtime is unavailable.");
+    }
+
+    browserServerRuntime = {
+      token: runtime.token,
+      sourceName: runtime.sourceName,
+      loadedFiles: runtime.loadedFiles,
+      hasAuth: runtime.hasAuth,
+    };
+    resetBrowserSession("server-backed", runtime.sourceName, {}, runtime.hasAuth ? "pending" : "{}", {});
+    browserSession.loadedFiles = new Set(runtime.loadedFiles);
+    browserSession.dirty = false;
+    return browserSessionInfo();
+  } catch {
+    browserServerRuntime = null;
+    resetBrowserSession("unloaded", null, {}, "{}", {});
+    return browserSessionInfo();
+  }
+}
+
 export async function readConfig(filename: string): Promise<string> {
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
     return invoke<string>("read_config", { filename });
+  }
+  if (browserSession.kind === "server-backed") {
+    if (filename === OPENCODE_FILE) {
+      const data = await apiJson<{ content: string }>("/api/config/opencode");
+      return data.content;
+    }
+    if (filename === OH_MY_LEGACY_FILE || filename === OH_MY_MODERN_FILE) {
+      const data = await apiJson<{ content: string }>("/api/config/oh-my");
+      return data.content;
+    }
   }
   return readBrowserConfig(filename);
 }
@@ -374,6 +466,24 @@ export async function writeConfig(filename: string, content: string): Promise<vo
     await invoke("write_config", { filename, content });
     return;
   }
+  if (browserSession.kind === "server-backed") {
+    if (filename === OPENCODE_FILE) {
+      await apiJson<{ ok: true }>("/api/config/opencode", {
+        method: "PUT",
+        body: JSON.stringify({ content }),
+      });
+      browserSession.dirty = false;
+      return;
+    }
+    if (filename === OH_MY_LEGACY_FILE || filename === OH_MY_MODERN_FILE) {
+      await apiJson<{ ok: true }>("/api/config/oh-my", {
+        method: "PUT",
+        body: JSON.stringify({ content }),
+      });
+      browserSession.dirty = false;
+      return;
+    }
+  }
   writeBrowserSessionFile(filename, content);
 }
 
@@ -381,6 +491,11 @@ export async function readAuth(): Promise<string> {
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
     return invoke<string>("read_auth");
+  }
+  if (browserSession.kind === "server-backed") {
+    const data = await apiJson<{ content: string }>("/api/auth");
+    browserSession.auth = data.content;
+    return data.content;
   }
   return browserSession.auth;
 }
@@ -508,6 +623,9 @@ export async function saveBrowserConfigSession(): Promise<BrowserConfigSessionIn
   if (browserSession.kind === "unloaded") {
     throw new Error("Browser configuration is not loaded.");
   }
+  if (browserSession.kind === "server-backed") {
+    throw new Error("Server-backed sessions save real files immediately through the local API.");
+  }
   if (!browserSession.fileHandles[OPENCODE_FILE]) {
     throw new Error("This browser session is not backed by opencode.json. Export instead.");
   }
@@ -538,6 +656,9 @@ export function exportBrowserConfigSession(): BrowserConfigSessionInfo {
   if (browserSession.kind === "unloaded") {
     throw new Error("Browser configuration is not loaded.");
   }
+  if (browserSession.kind === "server-backed") {
+    throw new Error("Server-backed sessions already operate on real server files. Use snapshots or your browser download flow if you need exports.");
+  }
   downloadJson(OPENCODE_FILE, readBrowserConfig(OPENCODE_FILE));
   downloadJson(OH_MY_MODERN_FILE, readBrowserConfig(OH_MY_MODERN_FILE));
   browserSession.dirty = false;
@@ -557,6 +678,10 @@ export async function listSnapshots(): Promise<SnapshotInfo[]> {
     const { invoke } = await loadTauriCore();
     return invoke<SnapshotInfo[]>("list_snapshots");
   }
+  if (browserSession.kind === "server-backed") {
+    const data = await apiJson<{ items: SnapshotInfo[] }>("/api/snapshots");
+    return data.items;
+  }
   return readBrowserSnapshots()
     .map(({ name, timestamp }) => ({ name, timestamp }))
     .sort((a, b) => b.timestamp - a.timestamp);
@@ -566,6 +691,13 @@ export async function saveSnapshot(name: string): Promise<void> {
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
     await invoke("save_snapshot", { name });
+    return;
+  }
+  if (browserSession.kind === "server-backed") {
+    await apiJson<{ ok: true }>("/api/snapshots", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
     return;
   }
   if (browserSession.kind === "unloaded") {
@@ -592,6 +724,13 @@ export async function restoreSnapshot(name: string): Promise<void> {
     await invoke("restore_snapshot", { name });
     return;
   }
+  if (browserSession.kind === "server-backed") {
+    await apiJson<{ ok: true }>(`/api/snapshots/${encodeURIComponent(name)}/restore`, {
+      method: "POST",
+    });
+    browserSession.dirty = false;
+    return;
+  }
   const snapshot = readBrowserSnapshots().find((item) => item.name === name);
   if (!snapshot) throw new Error(`Snapshot ${name} does not exist`);
   const files: Partial<Record<BrowserConfigFilename, string>> = {};
@@ -608,6 +747,12 @@ export async function deleteSnapshot(name: string): Promise<void> {
     await invoke("delete_snapshot", { name });
     return;
   }
+  if (browserSession.kind === "server-backed") {
+    await apiJson<{ ok: true }>(`/api/snapshots/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+    return;
+  }
   writeBrowserSnapshots(
     readBrowserSnapshots().filter((snapshot) => snapshot.name !== name),
   );
@@ -617,6 +762,13 @@ export async function renameSnapshot(from: string, to: string): Promise<void> {
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
     await invoke("rename_snapshot", { from, to });
+    return;
+  }
+  if (browserSession.kind === "server-backed") {
+    await apiJson<{ ok: true }>(`/api/snapshots/${encodeURIComponent(from)}/rename`, {
+      method: "POST",
+      body: JSON.stringify({ to }),
+    });
     return;
   }
   const fromName = validateSnapshotName(from);
@@ -637,6 +789,10 @@ export async function exportSnapshot(name: string): Promise<string> {
     const { invoke } = await loadTauriCore();
     return invoke<string>("export_snapshot", { name });
   }
+  if (browserSession.kind === "server-backed") {
+    const data = await apiJson<{ content: string }>(`/api/snapshots/${encodeURIComponent(name)}/export`);
+    return data.content;
+  }
   const snapshot = readBrowserSnapshots().find((item) => item.name === name);
   if (!snapshot) throw new Error(`Snapshot ${name} does not exist`);
   return JSON.stringify(snapshot.files, null, 2);
@@ -646,6 +802,10 @@ export async function listSkills(): Promise<SkillSummary[]> {
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
     return invoke<SkillSummary[]>("list_skills");
+  }
+  if (browserSession.kind === "server-backed") {
+    const data = await apiJson<{ items: SkillSummary[] }>("/api/skills");
+    return data.items;
   }
   const skills = readBrowserSkills();
   return Object.entries(skills)
@@ -663,6 +823,10 @@ export async function readSkill(name: string): Promise<SkillDetail> {
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
     return invoke<SkillDetail>("read_skill", { name });
+  }
+  if (browserSession.kind === "server-backed") {
+    const data = await apiJson<{ detail: SkillDetail }>(`/api/skills/${encodeURIComponent(name)}`);
+    return data.detail;
   }
   const skillName = validateSkillName(name);
   const skills = readBrowserSkills();
@@ -683,6 +847,13 @@ export async function createSkill(name: string, content: string): Promise<void> 
     await invoke("create_skill", { name, content });
     return;
   }
+  if (browserSession.kind === "server-backed") {
+    await apiJson<{ ok: true }>("/api/skills", {
+      method: "POST",
+      body: JSON.stringify({ name, content }),
+    });
+    return;
+  }
   const skillName = validateSkillName(name);
   const skills = readBrowserSkills();
   if (skills[skillName]) throw new Error(`Skill ${skillName} already exists`);
@@ -698,6 +869,13 @@ export async function writeSkillFile(
   if (isTauriRuntime()) {
     const { invoke } = await loadTauriCore();
     await invoke("write_skill_file", { name, path, content });
+    return;
+  }
+  if (browserSession.kind === "server-backed") {
+    await apiJson<{ ok: true }>(`/api/skills/${encodeURIComponent(name)}/files/${encodeURIComponent(path)}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    });
     return;
   }
   const skillName = validateSkillName(name);
@@ -761,6 +939,9 @@ export function describeBrowserLimitations(
   if (isTauriRuntime()) return null;
   if (session.kind === "unloaded") {
     return "Browser mode starts unloaded. Import config files or open a config folder before editing.";
+  }
+  if (session.kind === "server-backed") {
+    return "Browser mode is connected to the local config API and reads/writes the real server config files on WSL/Linux.";
   }
   if (Object.keys(auth).length === 0) {
     return "Browser mode did not load auth.json. It will not pretend to have desktop credentials; connected provider models require an explicit auth.json import or provider model entries.";
