@@ -5,11 +5,13 @@
   "selectHint": "选择或创建一个技能来编辑项目本地文件。",
   "mode": {
     "tauri": "Tauri",
-    "browser": "浏览器"
+    "browser": "浏览器",
+    "serverBacked": "服务器"
   },
   "description": {
     "tauri": "桌面模式会读取和写入项目本地的 .cursor/skills/。为安全起见，仅允许编辑技能目录顶层文本文件。",
-    "browser": "浏览器模式不会写入磁盘上的 .cursor/skills/。这里创建的技能仅保留在独立的 localStorage 预览工作区，不是配置来源。请使用 Tauri 模式编辑项目文件。"
+    "browser": "浏览器模式不会写入磁盘上的 .cursor/skills/。这里创建的技能仅保留在独立的 localStorage 预览工作区，不是配置来源。请使用 Tauri 模式编辑项目文件。",
+    "serverBacked": "服务器浏览器模式会通过本地 API 直接读取和写入 WSL/Linux 服务器上的真实 .cursor/skills/ 目录。"
   },
   "list": {
     "fileCount": "{{count}} 个文件"

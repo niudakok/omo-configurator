@@ -10,7 +10,8 @@
   },
   "browser": {
     "sessionNote": "Browser snapshots are local workspace checkpoints; restore loads an imported dirty session, not disk files.",
-    "fileBackedNote": "Snapshot save captures the current browser session. Use Save to files for real disk writes."
+    "fileBackedNote": "Snapshot save captures the current browser session. Use Save to files for real disk writes.",
+    "serverBackedNote": "Snapshots are stored on the local server and restore the real WSL/Linux config files."
   },
   "dialogs": {
     "restore": {

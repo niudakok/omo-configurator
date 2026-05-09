@@ -5,11 +5,13 @@
   "selectHint": "Select or create a skill to edit its project-local files.",
   "mode": {
     "tauri": "Tauri",
-    "browser": "Browser"
+    "browser": "Browser",
+    "serverBacked": "Server-backed"
   },
   "description": {
     "tauri": "Desktop mode reads and writes project-local skills in .cursor/skills/. Only top-level text files are editable for safety.",
-    "browser": "Browser mode does not write project .cursor/skills/ on disk. Skills created here remain in a separate localStorage preview workspace and are not config source-of-truth. Use Tauri mode to edit project files."
+    "browser": "Browser mode does not write project .cursor/skills/ on disk. Skills created here remain in a separate localStorage preview workspace and are not config source-of-truth. Use Tauri mode to edit project files.",
+    "serverBacked": "Server-backed browser mode reads and writes the real project .cursor/skills/ directory through the local API on the WSL/Linux server."
   },
   "list": {
     "fileCount": "{{count}} file"

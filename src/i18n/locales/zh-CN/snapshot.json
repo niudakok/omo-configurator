@@ -10,7 +10,8 @@
   },
   "browser": {
     "sessionNote": "浏览器快照只是本地工作区检查点；恢复会加载为有未保存修改的导入会话，不会写磁盘。",
-    "fileBackedNote": "快照保存捕获当前浏览器会话。需要真实写文件请使用“保存到文件”。"
+    "fileBackedNote": "快照保存捕获当前浏览器会话。需要真实写文件请使用“保存到文件”。",
+    "serverBackedNote": "快照保存在本地服务器上，恢复时会直接还原 WSL/Linux 上的真实配置文件。"
   },
   "dialogs": {
     "restore": {

@@ -15,9 +15,9 @@
     "browserModeTitle": "Running without Tauri. Source: {{source}}. Config files are session-based until explicitly saved or exported."
   },
   "browserSession": {
-    "unloadedTitle": "Load configuration to start editing",
-    "unloadedDescription": "Browser mode no longer invents opencode.json or oh-my config from localStorage. Open a folder, pick files, import JSON, or create a new session explicitly.",
-    "fallbackHint": "If your browser does not support folder/file picking, use Import JSON and Export files.",
+    "unloadedTitle": "Local config API not detected — fallback mode active",
+    "unloadedDescription": "This browser session cannot directly read or write the real WSL/Linux server config files. Browser mode also no longer invents opencode.json or oh-my config from localStorage. Open a folder, pick files, import JSON, or create a new session explicitly.",
+    "fallbackHint": "In fallback mode, only imported/selected files or a newly created session are editable. If your browser does not support folder/file picking, use Import JSON and Export files.",
     "openFolder": "Open config folder",
     "openFiles": "Pick config files",
     "importFile": "Import JSON file",
@@ -27,10 +27,12 @@
     "importShort": "Import",
     "saveToFiles": "Save to files",
     "exportFiles": "Export files",
+    "serverBackedActive": "Server-backed",
     "status": {
-      "unloaded": "Browser: unloaded",
-      "imported": "Browser: imported session",
-      "file-backed": "Browser: file-backed session",
+      "unloaded": "Browser: fallback (unloaded)",
+      "imported": "Browser: fallback (imported session)",
+      "file-backed": "Browser: fallback (file-backed session)",
+      "server-backed": "Browser: server-backed session",
       "dirty": "unsaved changes"
     }
   },
