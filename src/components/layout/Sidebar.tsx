@@ -162,7 +162,9 @@ export function Sidebar() {
         </Button>
         {browserSession && (
           <p className="mt-2 text-[11px] text-muted-foreground">
-            {browserSession.kind === "file-backed"
+            {browserSession.kind === "server-backed"
+              ? t("snapshot:browser.serverBackedNote")
+              : browserSession.kind === "file-backed"
               ? t("snapshot:browser.fileBackedNote")
               : t("snapshot:browser.sessionNote")}
           </p>

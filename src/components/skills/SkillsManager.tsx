@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createSkill,
+  getBrowserConfigSessionInfo,
   getRuntimeMode,
   listSkills,
   readSkill,
@@ -41,6 +42,7 @@ export function SkillsManager() {
   const [error, setError] = useState<string | null>(null);
 
   const runtimeMode = getRuntimeMode();
+  const browserSession = runtimeMode === "browser" ? getBrowserConfigSessionInfo() : null;
   const currentFile = useMemo(
     () => detail?.files.find((file) => file.path === selectedFile) ?? null,
     [detail, selectedFile],
@@ -187,7 +189,11 @@ export function SkillsManager() {
 
       <div className="flex-1 overflow-auto">
         <div className="mb-3 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-          {runtimeMode === "tauri" ? t("description.tauri") : t("description.browser")}
+            {runtimeMode === "tauri"
+              ? t("description.tauri")
+              : browserSession?.kind === "server-backed"
+                ? t("description.serverBacked")
+                : t("description.browser")}
         </div>
         {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
         {message && <p className="mb-3 text-sm text-muted-foreground">{message}</p>}

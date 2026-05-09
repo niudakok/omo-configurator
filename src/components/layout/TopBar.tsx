@@ -137,20 +137,25 @@ export function TopBar() {
             >
               {t("browserSession.importShort")}
             </Button>
-            {browserSession?.canSaveToDisk && (
-              <Button
-                variant="default"
-                size="sm"
+             {browserSession?.canSaveToDisk && browserSession.kind !== "server-backed" && (
+               <Button
+                 variant="default"
+                 size="sm"
                 onClick={() => void runSessionAction(saveBrowserSession)}
                 disabled={sessionBusy || !browserSession.dirty}
               >
                 {t("browserSession.saveToFiles")}
               </Button>
             )}
-            {browserSession?.kind !== "unloaded" && (
-              <Button
-                variant="outline"
-                size="sm"
+             {browserSession?.kind === "server-backed" && (
+               <Button variant="default" size="sm" disabled>
+                 {t("browserSession.serverBackedActive")}
+               </Button>
+             )}
+             {browserSession && browserSession.kind !== "unloaded" && browserSession.kind !== "server-backed" && (
+               <Button
+                 variant="outline"
+                 size="sm"
                 onClick={() => void runSessionAction(exportBrowserSession)}
                 disabled={sessionBusy}
               >
